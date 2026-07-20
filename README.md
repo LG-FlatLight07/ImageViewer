@@ -47,12 +47,13 @@ npx expo start --dev-client
 - Android: `npm run android`
 - iOS: `npm run ios` (macOS + Xcodeが必要)
 
-## Lint / Format
+## Lint / Format / Test
 
 ```bash
 npm run lint          # ESLint
 npm run format        # Prettier (自動整形)
 npm run format:check  # Prettier (差分チェックのみ)
+npm test              # Jest (ユニットテスト)
 ```
 
 ## ディレクトリ構成
@@ -73,4 +74,14 @@ src/
 2. **Phase 2**: 画像の一括保存・フォルダ/タグによるギャラリー管理・画面レイアウトの自由配置 — 完了
 3. **Phase 3**: 閲覧履歴・ブックマークのローカル永続化 — 完了
 4. **Phase 4**: 検索エンジン切替、ダークモード、プライベートタブなどの追加設定機能 — 完了
-5. **Phase 5**: テスト整備とストア(App Store / Google Play)申請準備
+5. **Phase 5**: テスト整備とストア(App Store / Google Play)申請準備 — 完了
+
+## リリース準備
+
+- **ユニットテスト**: `src/services/**/__tests__` に画像検出・URL解析ロジックのテストを配置(`npm test`)
+- **EAS Build**: `eas.json` にdevelopment/preview/productionのビルドプロファイルを用意
+  (`npx eas build --profile production --platform android|ios` 等で利用)
+- **プライバシーポリシー**: [`PRIVACY.md`](./PRIVACY.md) を参照。本アプリは外部サーバーへの
+  データ送信を行わず、閲覧履歴・ブックマーク・ダウンロード画像はすべて端末内にのみ保存されます
+- **バンドルID**: iOS `com.lgflatlight07.imageviewer` / Android `com.lgflatlight07.imageviewer`
+  (`app.json`。実際に申請する場合は組織のドメインに合わせて変更してください)
