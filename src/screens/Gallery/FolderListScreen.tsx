@@ -15,8 +15,10 @@ import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
-import { DraggableControl } from '../../components/layout/DraggableControl';
+import { ControlGroup } from '../../components/layout/ControlGroup';
 import { useAppTheme } from '../../theme/theme';
+
+const SCREEN_ID = 'gallery.folderList';
 
 const SORT_OPTIONS: { key: FolderSortKey; label: string }[] = [
   { key: 'name', label: '名前順' },
@@ -53,67 +55,20 @@ export function FolderListScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
+      <View style={styles.searchBarWrapper}>
+        <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
+          <Ionicons name="search" size={16} color={colors.secondaryText} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="フォルダ名・タグ名で検索"
+            placeholderTextColor={colors.secondaryText}
+          />
+        </View>
+      </View>
+
       <DraggableLayoutArea>
-        <DraggableControl
-          screenId="gallery.folderList"
-          controlId="searchBar"
-          defaultPosition={{ x: 12, y: 8 }}
-        >
-          <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
-            <Ionicons name="search" size={16} color={colors.secondaryText} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="フォルダ名・タグ名で検索"
-              placeholderTextColor={colors.secondaryText}
-            />
-          </View>
-        </DraggableControl>
-
-        <DraggableControl
-          screenId="gallery.folderList"
-          controlId="sortRow"
-          defaultPosition={{ x: 12, y: 56 }}
-        >
-          <View style={styles.sortRow}>
-            {SORT_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.sortButton,
-                  { backgroundColor: colors.surface },
-                  sortKey === option.key && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => setSortKey(option.key)}
-              >
-                <Text
-                  style={[
-                    styles.sortButtonText,
-                    { color: colors.secondaryText },
-                    sortKey === option.key && styles.sortButtonTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </DraggableControl>
-
-        <DraggableControl
-          screenId="gallery.folderList"
-          controlId="newFolderButton"
-          defaultPosition={{ x: 300, y: 8 }}
-        >
-          <TouchableOpacity
-            style={[styles.newFolderButton, { backgroundColor: colors.primary }]}
-            onPress={() => setCreatingFolder(true)}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-          </TouchableOpacity>
-        </DraggableControl>
-
         <FlatList
           style={styles.list}
           contentContainerStyle={styles.listContent}
@@ -132,6 +87,40 @@ export function FolderListScreen() {
             </Text>
           }
         />
+
+        <ControlGroup screenId={SCREEN_ID}>
+          {SORT_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.sortButton,
+                { backgroundColor: colors.surface },
+                sortKey === option.key && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setSortKey(option.key)}
+              accessibilityLabel={`sort-${option.key}`}
+            >
+              <Text
+                style={[
+                  styles.sortButtonText,
+                  { color: colors.secondaryText },
+                  sortKey === option.key && styles.sortButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity
+            style={[styles.newFolderButton, { backgroundColor: colors.primary }]}
+            onPress={() => setCreatingFolder(true)}
+            accessibilityLabel="create-folder"
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.newFolderButtonText}>新規フォルダ</Text>
+          </TouchableOpacity>
+        </ControlGroup>
       </DraggableLayoutArea>
 
       <ActionMenuModal
@@ -188,10 +177,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  searchBarWrapper: {
+    zIndex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: 260,
     height: 38,
     paddingHorizontal: 10,
     borderRadius: 19,
@@ -202,18 +196,11 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 14,
   },
-  sortRow: {
-    flexDirection: 'row',
-  },
   sortButton: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
     backgroundColor: '#f1f1f1',
-    marginRight: 6,
-  },
-  sortButtonActive: {
-    backgroundColor: '#4c8bf5',
   },
   sortButtonText: {
     fontSize: 12,
@@ -223,18 +210,24 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   newFolderButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#4c8bf5',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#4c8bf5',
+  },
+  newFolderButtonText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
   },
   list: {
     flex: 1,
   },
   listContent: {
-    paddingTop: 104,
+    paddingTop: 8,
     paddingBottom: 24,
   },
   emptyText: {

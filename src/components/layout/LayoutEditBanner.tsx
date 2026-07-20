@@ -17,7 +17,9 @@ export function LayoutEditBanner() {
   return (
     <View style={[styles.overlay, { top: insets.top + 8 }]} pointerEvents="box-none">
       <View style={styles.banner}>
-        <Text style={styles.text}>レイアウト編集中: ボタンをドラッグして配置できます</Text>
+        <Text style={styles.text}>
+          レイアウト編集中: ボタン群をドラッグして8方向のいずれかに配置できます
+        </Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.button} onPress={resetAll}>
             <Text style={styles.buttonText}>リセット</Text>

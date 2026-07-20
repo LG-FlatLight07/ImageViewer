@@ -8,10 +8,11 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { URLBar } from '../../components/URLBar';
+import { BrowserTabBar } from '../../components/BrowserTabBar';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
-import { DraggableControl } from '../../components/layout/DraggableControl';
-import { useBrowserStore } from '../../store/browserStore';
+import { ControlGroup } from '../../components/layout/ControlGroup';
+import { useBrowserStore, useActiveBrowserTab } from '../../store/browserStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
@@ -31,22 +32,23 @@ export function BrowserScreen() {
   const db = useSQLiteContext();
   const { colors } = useAppTheme();
   const searchEngine = useSettingsStore((state) => state.searchEngine);
+  const tabs = useBrowserStore((state) => state.tabs);
+  const activeTabId = useBrowserStore((state) => state.activeTabId);
+  const activeTab = useActiveBrowserTab();
   const {
-    url,
-    inputValue,
-    title,
-    canGoBack,
-    canGoForward,
-    loading,
     setUrl,
     setInputValue,
     setNavigationState,
     setLoading,
+    setPrivateMode,
+    openTab,
+    closeTab,
+    setActiveTabId,
   } = useBrowserStore();
+  const { url, inputValue, title, canGoBack, canGoForward, loading, privateMode } = activeTab;
 
   const [bookmarked, setBookmarked] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [privateMode, setPrivateMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,8 +115,28 @@ export function BrowserScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
+      <View style={styles.urlBarWrapper}>
+        <URLBar
+          value={inputValue}
+          loading={loading}
+          onChangeValue={setInputValue}
+          onSubmit={handleSubmit}
+          onReload={() =>
+            loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload()
+          }
+        />
+        <BrowserTabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={setActiveTabId}
+          onCloseTab={closeTab}
+          onNewTab={() => openTab()}
+        />
+      </View>
+
       <DraggableLayoutArea>
         <WebView
+          key={activeTabId}
           ref={webViewRef}
           source={{ uri: url }}
           style={styles.webview}
@@ -125,23 +147,7 @@ export function BrowserScreen() {
         />
         {privateMode && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
-        <DraggableControl screenId={SCREEN_ID} controlId="urlBar" defaultPosition={{ x: 8, y: 8 }}>
-          <URLBar
-            value={inputValue}
-            loading={loading}
-            onChangeValue={setInputValue}
-            onSubmit={handleSubmit}
-            onReload={() =>
-              loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload()
-            }
-          />
-        </DraggableControl>
-
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="backButton"
-          defaultPosition={{ x: 8, y: 56 }}
-        >
+        <ControlGroup screenId={SCREEN_ID}>
           <TouchableOpacity
             style={styles.toolbarButton}
             disabled={!canGoBack}
@@ -150,13 +156,7 @@ export function BrowserScreen() {
           >
             <Ionicons name="arrow-back" size={22} color={canGoBack ? '#333' : '#ccc'} />
           </TouchableOpacity>
-        </DraggableControl>
 
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="forwardButton"
-          defaultPosition={{ x: 56, y: 56 }}
-        >
           <TouchableOpacity
             style={styles.toolbarButton}
             disabled={!canGoForward}
@@ -165,13 +165,7 @@ export function BrowserScreen() {
           >
             <Ionicons name="arrow-forward" size={22} color={canGoForward ? '#333' : '#ccc'} />
           </TouchableOpacity>
-        </DraggableControl>
 
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="saveImagesButton"
-          defaultPosition={{ x: 104, y: 56 }}
-        >
           <TouchableOpacity
             style={styles.toolbarButton}
             onPress={handleSaveImages}
@@ -179,13 +173,7 @@ export function BrowserScreen() {
           >
             <Ionicons name="download-outline" size={22} color="#333" />
           </TouchableOpacity>
-        </DraggableControl>
 
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="bookmarkButton"
-          defaultPosition={{ x: 152, y: 56 }}
-        >
           <TouchableOpacity
             style={styles.toolbarButton}
             onPress={handleToggleBookmark}
@@ -193,16 +181,10 @@ export function BrowserScreen() {
           >
             <Ionicons name={bookmarked ? 'star' : 'star-outline'} size={22} color="#f6c453" />
           </TouchableOpacity>
-        </DraggableControl>
 
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="privateModeButton"
-          defaultPosition={{ x: 200, y: 56 }}
-        >
           <TouchableOpacity
             style={[styles.toolbarButton, privateMode && styles.toolbarButtonActive]}
-            onPress={() => setPrivateMode((prev) => !prev)}
+            onPress={() => setPrivateMode(!privateMode)}
             accessibilityLabel="toggle-private-mode"
           >
             <Ionicons
@@ -211,13 +193,7 @@ export function BrowserScreen() {
               color={privateMode ? '#fff' : '#333'}
             />
           </TouchableOpacity>
-        </DraggableControl>
 
-        <DraggableControl
-          screenId={SCREEN_ID}
-          controlId="menuButton"
-          defaultPosition={{ x: 248, y: 56 }}
-        >
           <TouchableOpacity
             style={styles.toolbarButton}
             onPress={() => setMenuVisible(true)}
@@ -225,13 +201,14 @@ export function BrowserScreen() {
           >
             <Ionicons name="menu" size={22} color="#333" />
           </TouchableOpacity>
-        </DraggableControl>
+        </ControlGroup>
       </DraggableLayoutArea>
 
       <ActionMenuModal
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         actions={[
+          { label: '新しいプライベートタブ', onPress: () => openTab(undefined, true) },
           { label: '履歴', onPress: () => navigation.navigate('History') },
           { label: 'ブックマーク', onPress: () => navigation.navigate('Bookmarks') },
         ]}
@@ -243,6 +220,9 @@ export function BrowserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  urlBarWrapper: {
+    zIndex: 1,
   },
   webview: {
     flex: 1,

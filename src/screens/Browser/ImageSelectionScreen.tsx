@@ -17,6 +17,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { RootStackParamList } from '../../navigation/types';
 import type { DetectedImage } from '../../services/imageGrouping';
 import { downloadImagesToNewFolder } from '../../services/downloadService';
+import { useSettingsStore } from '../../store/settingsStore';
 import { useAppTheme } from '../../theme/theme';
 
 const THUMB_SIZE = 100;
@@ -26,6 +27,7 @@ export function ImageSelectionScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const db = useSQLiteContext();
   const { colors } = useAppTheme();
+  const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
   const { pageTitle, sourceUrl, primaryGroup, otherImages } = route.params;
 
   const allImages = useMemo<DetectedImage[]>(
@@ -66,6 +68,7 @@ export function ImageSelectionScreen() {
         folderName: pageTitle,
         sourceUrl,
         imageUrls: targets.map((image) => image.src),
+        folderNameExclusions,
         onProgress: (completed, total) => setProgress({ completed, total }),
       });
       navigation.navigate('MainTabs', { screen: 'Gallery' } as never);

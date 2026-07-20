@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -9,7 +10,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSQLiteContext } from 'expo-sqlite';
 
+import { listAllTagNames } from '../db/foldersRepository';
 import { useAppTheme } from '../theme/theme';
 
 type TagEditorModalProps = {
@@ -28,8 +31,10 @@ export function TagEditorModal({
   onSubmit,
 }: TagEditorModalProps) {
   const { colors } = useAppTheme();
+  const db = useSQLiteContext();
   const [tags, setTags] = useState<string[]>(initialTags);
   const [inputValue, setInputValue] = useState('');
+  const [existingTags, setExistingTags] = useState<string[]>([]);
 
   useEffect(() => {
     if (visible) {
@@ -38,6 +43,9 @@ export function TagEditorModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTags(initialTags);
       setInputValue('');
+      listAllTagNames(db).then((names) => {
+        setExistingTags(names);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -50,9 +58,24 @@ export function TagEditorModal({
     setInputValue('');
   };
 
+  const addTag = (tag: string) => {
+    if (!tags.includes(tag)) {
+      setTags((prev) => [...prev, tag]);
+    }
+    setInputValue('');
+  };
+
   const removeTag = (tag: string) => {
     setTags((prev) => prev.filter((t) => t !== tag));
   };
+
+  const suggestions = existingTags.filter((name) => {
+    if (tags.includes(name)) {
+      return false;
+    }
+    const query = inputValue.trim().toLowerCase();
+    return query === '' || name.toLowerCase().includes(query);
+  });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -86,6 +109,30 @@ export function TagEditorModal({
             placeholderTextColor={colors.secondaryText}
             returnKeyType="done"
           />
+
+          {suggestions.length > 0 && (
+            <View style={styles.suggestionsBlock}>
+              <Text style={[styles.suggestionsLabel, { color: colors.secondaryText }]}>
+                既存のタグから選択
+              </Text>
+              <ScrollView style={styles.suggestionsScroll} keyboardShouldPersistTaps="handled">
+                <View style={styles.suggestionsRow}>
+                  {suggestions.map((name) => (
+                    <TouchableOpacity
+                      key={name}
+                      style={[styles.suggestionChip, { backgroundColor: colors.surface }]}
+                      onPress={() => addTag(name)}
+                    >
+                      <Ionicons name="add" size={14} color={colors.secondaryText} />
+                      <Text style={[styles.suggestionChipText, { color: colors.text }]}>
+                        {name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
 
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={onCancel}>
@@ -156,6 +203,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 15,
+  },
+  suggestionsBlock: {
+    marginTop: 10,
+  },
+  suggestionsLabel: {
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  suggestionsScroll: {
+    maxHeight: 96,
+  },
+  suggestionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  suggestionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  suggestionChipText: {
+    fontSize: 12,
   },
   buttonRow: {
     flexDirection: 'row',

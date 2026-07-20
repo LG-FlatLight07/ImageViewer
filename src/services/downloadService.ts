@@ -6,8 +6,19 @@ import { createFolder } from '../db/foldersRepository';
 const DOWNLOAD_CONCURRENCY = 4;
 const INVALID_FILENAME_CHARS = '/\\:*?"<>|';
 
-function sanitizeFolderName(rawName: string): string {
-  const withoutInvalidChars = Array.from(rawName)
+function applyExclusions(rawName: string, exclusions: string[]): string {
+  return exclusions.reduce((name, exclusion) => {
+    const trimmed = exclusion.trim();
+    if (!trimmed) {
+      return name;
+    }
+    return name.split(trimmed).join('');
+  }, rawName);
+}
+
+function sanitizeFolderName(rawName: string, exclusions: string[] = []): string {
+  const withoutExclusions = applyExclusions(rawName, exclusions);
+  const withoutInvalidChars = Array.from(withoutExclusions)
     .map((ch) => (ch.charCodeAt(0) < 0x20 || INVALID_FILENAME_CHARS.includes(ch) ? ' ' : ch))
     .join('');
   const cleaned = withoutInvalidChars.replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -77,10 +88,11 @@ export async function downloadImagesToNewFolder(
     folderName: string;
     sourceUrl: string;
     imageUrls: string[];
+    folderNameExclusions?: string[];
     onProgress?: (completed: number, total: number) => void;
   },
 ): Promise<{ folderId: string; successCount: number; failureCount: number }> {
-  const baseName = sanitizeFolderName(options.folderName);
+  const baseName = sanitizeFolderName(options.folderName, options.folderNameExclusions);
   const directory = resolveUniqueDirectory(baseName);
   directory.create({ intermediates: true, idempotent: true });
 

@@ -1,8 +1,9 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { FolderWithTags } from '../db/types';
+import { listFolderImageUris } from '../db/folderImages';
 import { useAppTheme } from '../theme/theme';
 
 type FolderRowProps = {
@@ -13,6 +14,19 @@ type FolderRowProps = {
 
 export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
   const { colors } = useAppTheme();
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listFolderImageUris(folder).then((uris) => {
+      if (!cancelled) {
+        setThumbnailUri(uris[0] ?? null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [folder]);
 
   return (
     <TouchableOpacity
@@ -20,7 +34,19 @@ export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Ionicons name="folder" size={28} color="#f6c453" />
+      {thumbnailUri ? (
+        <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
+      ) : (
+        <View
+          style={[
+            styles.thumbnail,
+            styles.thumbnailPlaceholder,
+            { backgroundColor: colors.surface },
+          ]}
+        >
+          <Ionicons name="folder" size={24} color="#f6c453" />
+        </View>
+      )}
       <View style={styles.textGroup}>
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {folder.name}
@@ -49,6 +75,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  thumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textGroup: {
     flex: 1,

@@ -19,8 +19,11 @@ export const SEARCH_ENGINES: {
 type SettingsState = {
   searchEngine: SearchEngineKey;
   themePreference: ThemePreference;
+  folderNameExclusions: string[];
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
+  addFolderNameExclusion: (text: string) => void;
+  removeFolderNameExclusion: (text: string) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -28,8 +31,21 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       searchEngine: 'google',
       themePreference: 'system',
+      folderNameExclusions: [],
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
+      addFolderNameExclusion: (text) =>
+        set((state) => {
+          const trimmed = text.trim();
+          if (!trimmed || state.folderNameExclusions.includes(trimmed)) {
+            return state;
+          }
+          return { folderNameExclusions: [...state.folderNameExclusions, trimmed] };
+        }),
+      removeFolderNameExclusion: (text) =>
+        set((state) => ({
+          folderNameExclusions: state.folderNameExclusions.filter((entry) => entry !== text),
+        })),
     }),
     {
       name: 'settings-store',
