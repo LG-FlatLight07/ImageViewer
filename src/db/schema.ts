@@ -1,15 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
-export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
-  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const currentVersion = row?.user_version ?? 0;
-  if (currentVersion >= SCHEMA_VERSION) {
-    return;
-  }
-
-  await db.execAsync(`
+const MIGRATIONS: Record<number, string> = {
+  1: `
     PRAGMA journal_mode = WAL;
 
     CREATE TABLE IF NOT EXISTS folders (
@@ -35,7 +29,35 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id);
     CREATE INDEX IF NOT EXISTS idx_folder_tags_folder_id ON folder_tags(folder_id);
     CREATE INDEX IF NOT EXISTS idx_folder_tags_tag_id ON folder_tags(tag_id);
-  `);
+  `,
+  2: `
+    CREATE TABLE IF NOT EXISTS history (
+      id TEXT PRIMARY KEY NOT NULL,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      visited_at INTEGER NOT NULL
+    );
 
-  await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id TEXT PRIMARY KEY NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_history_visited_at ON history(visited_at);
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
+  `,
+};
+
+export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  let currentVersion = row?.user_version ?? 0;
+
+  while (currentVersion < SCHEMA_VERSION) {
+    const nextVersion = currentVersion + 1;
+    await db.execAsync(MIGRATIONS[nextVersion]);
+    await db.execAsync(`PRAGMA user_version = ${nextVersion}`);
+    currentVersion = nextVersion;
+  }
 }

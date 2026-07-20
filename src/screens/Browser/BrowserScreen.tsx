@@ -1,10 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSQLiteContext } from 'expo-sqlite';
 
 import { URLBar } from '../../components/URLBar';
+import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { DraggableControl } from '../../components/layout/DraggableControl';
 import { useBrowserStore } from '../../store/browserStore';
@@ -12,15 +16,21 @@ import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
+import type { BrowserStackParamList } from '../../navigation/types';
+import { addHistoryEntry } from '../../db/historyRepository';
+import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 
 const SCREEN_ID = 'browser';
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
   const rootNavigation = useRootNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<BrowserStackParamList>>();
+  const db = useSQLiteContext();
   const {
     url,
     inputValue,
+    title,
     canGoBack,
     canGoForward,
     loading,
@@ -30,6 +40,21 @@ export function BrowserScreen() {
     setLoading,
   } = useBrowserStore();
 
+  const [bookmarked, setBookmarked] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    isBookmarked(db, url).then((result) => {
+      if (!cancelled) {
+        setBookmarked(result);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [db, url]);
+
   const handleSubmit = () => {
     const resolved = resolveInputToUrl(inputValue);
     if (resolved) {
@@ -38,13 +63,30 @@ export function BrowserScreen() {
   };
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
-    setNavigationState({ canGoBack: navState.canGoBack, canGoForward: navState.canGoForward });
+    setNavigationState({
+      canGoBack: navState.canGoBack,
+      canGoForward: navState.canGoForward,
+      title: navState.title,
+    });
     setInputValue(navState.url);
     setLoading(navState.loading);
+    if (!navState.loading && navState.url) {
+      addHistoryEntry(db, { url: navState.url, title: navState.title || navState.url });
+    }
   };
 
   const handleSaveImages = () => {
     webViewRef.current?.injectJavaScript(IMAGE_SCAN_SCRIPT);
+  };
+
+  const handleToggleBookmark = async () => {
+    if (bookmarked) {
+      await removeBookmarkByUrl(db, url);
+      setBookmarked(false);
+    } else {
+      await addBookmark(db, { url, title: title || url });
+      setBookmarked(true);
+    }
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -128,7 +170,44 @@ export function BrowserScreen() {
             <Ionicons name="download-outline" size={22} color="#333" />
           </TouchableOpacity>
         </DraggableControl>
+
+        <DraggableControl
+          screenId={SCREEN_ID}
+          controlId="bookmarkButton"
+          defaultPosition={{ x: 152, y: 56 }}
+        >
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={handleToggleBookmark}
+            accessibilityLabel="toggle-bookmark"
+          >
+            <Ionicons name={bookmarked ? 'star' : 'star-outline'} size={22} color="#f6c453" />
+          </TouchableOpacity>
+        </DraggableControl>
+
+        <DraggableControl
+          screenId={SCREEN_ID}
+          controlId="menuButton"
+          defaultPosition={{ x: 200, y: 56 }}
+        >
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => setMenuVisible(true)}
+            accessibilityLabel="open-menu"
+          >
+            <Ionicons name="menu" size={22} color="#333" />
+          </TouchableOpacity>
+        </DraggableControl>
       </DraggableLayoutArea>
+
+      <ActionMenuModal
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        actions={[
+          { label: '履歴', onPress: () => navigation.navigate('History') },
+          { label: 'ブックマーク', onPress: () => navigation.navigate('Bookmarks') },
+        ]}
+      />
     </SafeAreaView>
   );
 }

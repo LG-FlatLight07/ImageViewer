@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { MainTabParamList, RootStackParamList } from './types';
-import { BrowserScreen } from '../screens/Browser/BrowserScreen';
+import { BrowserNavigator } from './BrowserNavigator';
 import { ImageSelectionScreen } from '../screens/Browser/ImageSelectionScreen';
 import { GalleryNavigator } from './GalleryNavigator';
 import { FolderPickerScreen } from '../screens/Gallery/FolderPickerScreen';
@@ -19,7 +19,7 @@ function MainTabs() {
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen
         name="Browser"
-        component={BrowserScreen}
+        component={BrowserNavigator}
         options={{
           title: 'ブラウザー',
           tabBarIcon: ({ color, size }) => (

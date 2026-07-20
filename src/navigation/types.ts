@@ -17,6 +17,12 @@ export type MainTabParamList = {
   Settings: undefined;
 };
 
+export type BrowserStackParamList = {
+  BrowserHome: undefined;
+  History: undefined;
+  Bookmarks: undefined;
+};
+
 export type GalleryStackParamList = {
   FolderList: undefined;
   FolderDetail: { folderId: string };

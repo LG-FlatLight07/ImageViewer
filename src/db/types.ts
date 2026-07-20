@@ -17,3 +17,17 @@ export type FolderWithTags = Folder & {
 };
 
 export type FolderSortKey = 'name' | 'createdAt' | 'tagName';
+
+export type HistoryEntry = {
+  id: string;
+  url: string;
+  title: string;
+  visitedAt: number;
+};
+
+export type Bookmark = {
+  id: string;
+  url: string;
+  title: string;
+  createdAt: number;
+};
