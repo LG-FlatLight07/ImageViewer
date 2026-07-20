@@ -37,8 +37,11 @@ npm install
 
 ## 開発サーバーの起動
 
-ネイティブモジュール(react-native-webview等)を使用するため、Expo Go ではなく
-Dev Client でのビルド・起動を前提とします。
+本プロジェクトが使用するネイティブモジュール(react-native-webview等)は、現時点では
+いずれもExpo Go(SDK 57)に標準搭載されたバージョンと互換のため、**Expo Goでの実機
+プレビューが利用できます**(下記「実機プレビュー」セクション参照)。カスタムネイティブ
+コードを追加した場合など、Expo Goで動かなくなった場合はDev Clientでのビルド・起動に
+切り替えてください。
 
 ```bash
 npx expo start --dev-client
@@ -46,6 +49,47 @@ npx expo start --dev-client
 
 - Android: `npm run android`
 - iOS: `npm run ios` (macOS + Xcodeが必要)
+
+### 実機プレビュー(Expo Go・推奨: Mac/Android Studio不要)
+
+Windows PCからでも、Mac(Xcode)やAndroid Studioなしで、お手持ちのスマートフォンに
+コードの変更をリアルタイムに反映しながら開発できます。iPhoneでもApple Developer
+Programへの登録は不要です。
+
+1. PCにNode.js(LTS版)をインストールし、このリポジトリをclone後 `npm install`
+2. スマートフォンに **Expo Go** アプリをインストール
+   ([App Store](https://apps.apple.com/app/expo-go/id982107779) /
+   [Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent))
+3. PCでdevサーバーを起動
+
+   ```bash
+   npm start
+   ```
+
+   ターミナルにQRコードが表示されます。
+
+4. スマートフォンで読み取る
+   - iPhone: 標準の**カメラアプリ**でQRコードを読み取り、通知をタップ(Expo Goが自動で開きます)
+   - Android: Expo Goアプリ内の「Scan QR code」でQRコードを読み取り
+5. PCとスマートフォンが同じWi-Fiに接続されていれば、そのままアプリが起動します。
+   接続できない場合(モバイル回線・別ネットワーク・社内LANの分離など)は、代わりに
+
+   ```bash
+   npm run start:tunnel
+   ```
+
+   を使ってください(初回はトンネル用パッケージ `@expo/ngrok` のインストールを
+   求められるので、指示に従ってインストールしてください)。
+
+6. コードを保存すると、スマートフォン上のアプリが自動でリロードされます。
+   ブラウザータブ(WebView)を含め、実機上ではすべての機能を確認できます。
+
+**注意点**: Expo Goでは `react-native-reanimated` / `react-native-worklets` を
+Expo SDKに同梱されたバージョンでしか利用できません。本プロジェクトの現在のバージョン
+(`package.json` 参照)はExpo SDK 57のExpo Go対応範囲内ですが、将来これらのパッケージを
+更新する際は [Expo公式の対応表](https://docs.expo.dev/versions/latest/sdk/reanimated/)
+を確認してください。範囲外になった場合はExpo Goではなく、EAS Build等でのDev Client
+ビルドが必要になります。
 
 ### Webプレビュー(簡易確認用)
 
