@@ -91,6 +91,12 @@ Expo SDKに同梱されたバージョンでしか利用できません。本プ
 を確認してください。範囲外になった場合はExpo Goではなく、EAS Build等でのDev Client
 ビルドが必要になります。
 
+**「Project is incompatible with this version of Expo Go」と表示される場合**: Expo Go
+アプリを最新版に更新しても解消しないことがあります。これは、SDKの新バージョン(現在は
+SDK 57)がリリースされてから、App Store/Google Play版のExpo GoがそのSDKに対応するまでに
+タイムラグが生じるためです。この場合、Expo GoがSDK 57に対応するまでの暫定策として、
+下記の「Webプレビュー」を使って開発を進めてください。
+
 ### Webプレビュー(簡易確認用)
 
 `npm run web` でブラウザ上に簡易プレビューを表示できます。ただし
