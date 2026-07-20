@@ -54,7 +54,8 @@ npx expo start --dev-client
 
 Windows PCからでも、Mac(Xcode)やAndroid Studioなしで、お手持ちのスマートフォンに
 コードの変更をリアルタイムに反映しながら開発できます。iPhoneでもApple Developer
-Programへの登録は不要です。
+Programへの登録は不要です。iPhoneでうまく起動しない場合は、下記の
+「Androidエミュレータでのプレビュー」の方が確実です。
 
 1. PCにNode.js(LTS版)をインストールし、このリポジトリをclone後 `npm install`
 2. スマートフォンに **Expo Go** アプリをインストール
@@ -96,6 +97,44 @@ Expo SDKに同梱されたバージョンでしか利用できません。本プ
 SDK 57)がリリースされてから、App Store/Google Play版のExpo GoがそのSDKに対応するまでに
 タイムラグが生じるためです。この場合、Expo GoがSDK 57に対応するまでの暫定策として、
 下記の「Webプレビュー」を使って開発を進めてください。
+
+### Androidエミュレータでのプレビュー(推奨: 検索→画像保存まで通しで確認したい場合)
+
+`react-native-webview` はWeb実装を持たないため、下記の「Webプレビュー」ではブラウザータブ
+そのものを確認できません。「実際にブラウザでページを検索して画像を保存する」までを通しで
+試すには、**Androidの実行環境そのもの**が必要です。Windows PC上でも、
+**Android Studio + Androidエミュレータ**を使えば無料・追加のアカウント登録なしで実現できます
+(iOSと違い、Androidは実機/エミュレータともに開発者アカウント登録が不要です)。
+
+1. [Android Studio](https://developer.android.com/studio) をインストールします。
+   セットアップウィザードで Android SDK・Emulator・システムイメージも一式インストールされます。
+2. Android Studioを開き、右側の **Device Manager** → **Create Device** で仮想デバイス(AVD)を
+   作成します(Pixelシリーズ+比較的新しいAPIレベルのシステムイメージを選択)。
+3. Device Managerの再生ボタンでエミュレータを起動します。
+4. プロジェクトフォルダで開発サーバーを起動し、まずExpo Goでの起動を試します。
+
+   ```bash
+   npm start
+   ```
+
+   ターミナルで `a` キーを押すと、起動中のエミュレータにExpo Goが自動インストールされ
+   アプリが起動します。
+
+5. もしAndroid版のExpo GoもSDK 57に未対応で起動できない場合は、代わりに
+   このプロジェクト専用のネイティブDev Clientをローカルでビルドして
+   エミュレータに直接インストールします(EASのようなクラウドビルドは使わず、
+   Android Studio付属のSDK/Gradleだけでビルドするため、Expo Goのバージョン互換性問題を
+   回避できます)。
+
+   ```bash
+   npx expo run:android
+   ```
+
+   初回ビルドは数分〜十数分かかり、数GBのディスク容量を使用します。
+
+6. 起動できれば、**Android実機と同じWebView実装**が使えるようになります。ブラウザータブで
+   URLや検索ワードを入力してページを開き、「画像を保存」ボタンから連番画像の検出・選択・
+   ダウンロード・ギャラリーでの確認まで、実際のアプリ操作で一気通貫にテストできます。
 
 ### Webプレビュー(簡易確認用)
 
