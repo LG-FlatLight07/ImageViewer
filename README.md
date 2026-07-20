@@ -2,13 +2,27 @@
 
 Web閲覧機能と画像ビューアー/ギャラリー機能を併せ持つ、Android/iOS向けブラウザーアプリ。
 
+## 主な機能
+
+- **ブラウザー**: URLバー、戻る/進む/リロードを備えたWebViewブラウザー
+- **画像の一括保存**: 閲覧中ページから広告を除いた連番画像を検出し、手動選択も併用して一括ダウンロード
+  (ダウンロード時にページタイトル名のフォルダを自動作成)
+- **画像ギャラリー**: ダウンロードしたフォルダの一覧・階層管理・タグ付け・名前/日時/タグ順ソート・
+  名前/タグ検索、フォルダ内画像のグリッド表示とフルスクリーンビューアー(スワイプ・ピンチズーム)
+- **画面レイアウトの自由配置**: 設定画面から「レイアウト編集モード」を有効にすると、各画面の
+  操作用ボタンやバーをドラッグして好きな位置に配置できる(位置は端末に保存され、リセットも可能)
+
 ## 技術スタック
 
 - [Expo](https://expo.dev/) (React Native + TypeScript)
-- [React Navigation](https://reactnavigation.org/) (Bottom Tabs)
-- [Zustand](https://github.com/pmndrs/zustand) (状態管理)
+- [React Navigation](https://reactnavigation.org/) (Bottom Tabs + Native Stack)
+- [Zustand](https://github.com/pmndrs/zustand) (状態管理・画面レイアウト位置の永続化)
 - [react-native-webview](https://github.com/react-native-webview/react-native-webview)
-- expo-file-system / expo-media-library (画像保存・ギャラリー連携。Phase 3で利用予定)
+- [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) (フォルダ・タグのメタデータ管理)
+- [expo-file-system](https://docs.expo.dev/versions/latest/sdk/filesystem/) (画像の一括ダウンロード・フォルダ管理)
+- [react-native-gesture-handler](https://docs.swmansion.com/react-native-gesture-handler/) /
+  [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/)
+  (UIのドラッグ配置、画像ビューアーのピンチズーム)
 
 ## セットアップ
 
@@ -40,18 +54,18 @@ npm run format:check  # Prettier (差分チェックのみ)
 
 ```
 src/
-  navigation/   # 画面遷移構成 (Bottom Tabs)
-  screens/      # 画面コンポーネント (Browser, Gallery, History, Bookmarks, Settings)
-  components/   # 共通UIコンポーネント
-  store/        # Zustand ストア
-  db/           # ローカルDB (履歴・ブックマーク、Phase 2で実装予定)
-  services/     # URL解析やダウンロード処理などのユーティリティ
+  navigation/   # 画面遷移構成 (Root Stack / Bottom Tabs / Gallery Stack)
+  screens/      # 画面コンポーネント (Browser, Gallery, Settings)
+  components/   # 共通UIコンポーネント (layout/ 配下はドラッグ配置システム)
+  store/        # Zustand ストア (ブラウザー状態・画面レイアウト位置)
+  db/           # SQLiteスキーマ・フォルダ/タグのリポジトリ関数
+  services/     # 画像検出・グルーピング・ダウンロード・URL解析
 ```
 
 ## 開発ロードマップ
 
-1. **Phase 1 (現在)**: 単一タブのWebViewブラウザー(URLバー、戻る/進む/リロード)
-2. **Phase 2**: ブックマーク・閲覧履歴のローカル永続化
-3. **Phase 3**: Webページ内画像の保存とアプリ内ギャラリー/フルスクリーンビューアー
-4. **Phase 4**: 検索エンジン切替、ダークモード、プライベートタブなどの設定機能
+1. **Phase 1**: 単一タブのWebViewブラウザー(URLバー、戻る/進む/リロード) — 完了
+2. **Phase 2**: 画像の一括保存・フォルダ/タグによるギャラリー管理・画面レイアウトの自由配置 — 完了
+3. **Phase 3**: 閲覧履歴・ブックマークのローカル永続化
+4. **Phase 4**: 検索エンジン切替、ダークモード、プライベートタブなどの追加設定機能
 5. **Phase 5**: テスト整備とストア(App Store / Google Play)申請準備
