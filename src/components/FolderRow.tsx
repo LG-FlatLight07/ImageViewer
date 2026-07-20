@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { FolderWithTags } from '../db/types';
@@ -10,9 +11,18 @@ type FolderRowProps = {
   folder: FolderWithTags;
   onPress: () => void;
   onOpenMenu: () => void;
+  onDelete: () => void;
+  /** Omitted (no source URL, or a parent/container folder) disables the left-swipe jump action. */
+  onJumpToSource?: () => void;
 };
 
-export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
+export function FolderRow({
+  folder,
+  onPress,
+  onOpenMenu,
+  onDelete,
+  onJumpToSource,
+}: FolderRowProps) {
   const { colors } = useAppTheme();
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
 
@@ -29,42 +39,72 @@ export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
   }, [folder]);
 
   return (
-    <TouchableOpacity
-      style={[styles.row, { borderBottomColor: colors.border }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      {thumbnailUri ? (
-        <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
-      ) : (
-        <View
-          style={[
-            styles.thumbnail,
-            styles.thumbnailPlaceholder,
-            { backgroundColor: colors.surface },
-          ]}
+    <Swipeable
+      renderLeftActions={() => (
+        <TouchableOpacity
+          style={styles.deleteAction}
+          onPress={onDelete}
+          accessibilityLabel="delete-folder"
         >
-          <Ionicons name="folder" size={24} color="#f6c453" />
-        </View>
+          <Ionicons name="trash-outline" size={20} color="#fff" />
+          <Text style={styles.actionText}>削除</Text>
+        </TouchableOpacity>
       )}
-      <View style={styles.textGroup}>
-        <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-          {folder.name}
-        </Text>
-        {folder.tags.length > 0 && (
-          <View style={styles.tagRow}>
-            {folder.tags.map((tag) => (
-              <View key={tag.id} style={styles.tagChip}>
-                <Text style={styles.tagText}>{tag.name}</Text>
-              </View>
-            ))}
+      renderRightActions={
+        onJumpToSource
+          ? () => (
+              <TouchableOpacity
+                style={styles.jumpAction}
+                onPress={onJumpToSource}
+                accessibilityLabel="jump-to-source"
+              >
+                <Ionicons name="open-outline" size={20} color="#fff" />
+                <Text style={styles.actionText}>URLへ</Text>
+              </TouchableOpacity>
+            )
+          : undefined
+      }
+    >
+      <TouchableOpacity
+        style={[
+          styles.row,
+          { backgroundColor: colors.background, borderBottomColor: colors.border },
+        ]}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        {thumbnailUri ? (
+          <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
+        ) : (
+          <View
+            style={[
+              styles.thumbnail,
+              styles.thumbnailPlaceholder,
+              { backgroundColor: colors.surface },
+            ]}
+          >
+            <Ionicons name="folder" size={24} color="#f6c453" />
           </View>
         )}
-      </View>
-      <TouchableOpacity style={styles.menuButton} onPress={onOpenMenu} hitSlop={8}>
-        <Ionicons name="ellipsis-vertical" size={18} color={colors.secondaryText} />
+        <View style={styles.textGroup}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+            {folder.name}
+          </Text>
+          {folder.tags.length > 0 && (
+            <View style={styles.tagRow}>
+              {folder.tags.map((tag) => (
+                <View key={tag.id} style={styles.tagChip}>
+                  <Text style={styles.tagText}>{tag.name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+        <TouchableOpacity style={styles.menuButton} onPress={onOpenMenu} hitSlop={8}>
+          <Ionicons name="ellipsis-vertical" size={18} color={colors.secondaryText} />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </Swipeable>
   );
 }
 
@@ -110,5 +150,23 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     padding: 6,
+  },
+  deleteAction: {
+    width: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e0453f',
+  },
+  jumpAction: {
+    width: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4c8bf5',
+  },
+  actionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

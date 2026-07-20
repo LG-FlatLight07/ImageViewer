@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -9,12 +9,21 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { GalleryStackParamList } from '../../navigation/types';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import type { FolderWithTags } from '../../db/types';
-import { createFolder, getFolder, listFolders, setFolderTags } from '../../db/foldersRepository';
-import { listFolderImageUris } from '../../db/folderImages';
+import {
+  createFolder,
+  deleteFolder,
+  getFolder,
+  incrementFolderViewCount,
+  listFolders,
+  renameFolder,
+  setFolderTags,
+} from '../../db/foldersRepository';
+import { deleteFolderFiles, listFolderImageUris } from '../../db/folderImages';
 import { FolderRow } from '../../components/FolderRow';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
+import { useBrowserStore } from '../../store/browserStore';
 import { useAppTheme } from '../../theme/theme';
 
 const IMAGE_COLUMNS = 3;
@@ -29,6 +38,7 @@ export function FolderDetailScreen() {
   const route = useRoute<RouteProp<GalleryStackParamList, 'FolderDetail'>>();
   const { folderId } = route.params;
   const { colors } = useAppTheme();
+  const setBrowserUrl = useBrowserStore((state) => state.setUrl);
 
   const [folder, setFolder] = useState<FolderWithTags | null>(null);
   const [subfolders, setSubfolders] = useState<FolderWithTags[]>([]);
@@ -36,6 +46,7 @@ export function FolderDetailScreen() {
   const [menuFolder, setMenuFolder] = useState<FolderWithTags | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [taggingTarget, setTaggingTarget] = useState<FolderWithTags | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<FolderWithTags | null>(null);
 
   const reload = useCallback(async () => {
     const current = await getFolder(db, folderId);
@@ -48,9 +59,37 @@ export function FolderDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      incrementFolderViewCount(db, folderId);
       reload();
-    }, [reload]),
+    }, [db, folderId, reload]),
   );
+
+  const handleDeleteSubfolder = (target: FolderWithTags) => {
+    Alert.alert(
+      'フォルダを削除しますか?',
+      `「${target.name}」を削除します。この操作は元に戻せません。`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteFolderFiles(target);
+            await deleteFolder(db, target.id);
+            reload();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleJumpToSource = (target: FolderWithTags) => {
+    if (!target.sourceUrl) {
+      return;
+    }
+    setBrowserUrl(target.sourceUrl);
+    rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: folder?.name ?? '' });
@@ -111,6 +150,10 @@ export function FolderDetailScreen() {
                   folder={item.folder}
                   onPress={() => navigation.push('FolderDetail', { folderId: item.folder.id })}
                   onOpenMenu={() => setMenuFolder(item.folder)}
+                  onDelete={() => handleDeleteSubfolder(item.folder)}
+                  onJumpToSource={
+                    item.folder.sourceUrl ? () => handleJumpToSource(item.folder) : undefined
+                  }
                 />
               </View>
             );
@@ -143,6 +186,10 @@ export function FolderDetailScreen() {
             onPress: () => setTaggingTarget(menuFolder),
           },
           {
+            label: '名前を変更',
+            onPress: () => setRenamingFolder(menuFolder),
+          },
+          {
             label: '別のフォルダへ移動',
             onPress: () => {
               if (menuFolder) {
@@ -164,6 +211,24 @@ export function FolderDetailScreen() {
           setCreatingFolder(false);
           if (trimmed) {
             await createFolder(db, { name: trimmed, parentId: folderId, dirPath: null });
+            reload();
+          }
+        }}
+      />
+
+      <PromptModal
+        visible={renamingFolder !== null}
+        title="名前を変更"
+        placeholder="フォルダ名"
+        initialValue={renamingFolder?.name ?? ''}
+        submitLabel="変更"
+        onCancel={() => setRenamingFolder(null)}
+        onSubmit={async (name) => {
+          const trimmed = name.trim();
+          const target = renamingFolder;
+          setRenamingFolder(null);
+          if (target && trimmed) {
+            await renameFolder(db, target.id, trimmed);
             reload();
           }
         }}

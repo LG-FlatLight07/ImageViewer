@@ -18,3 +18,18 @@ export async function listFolderImageUris(folder: Folder | null): Promise<string
     return [];
   }
 }
+
+export async function deleteFolderFiles(folder: Folder | null): Promise<void> {
+  if (!folder?.dirPath) {
+    return;
+  }
+  try {
+    const directory = new Directory(folder.dirPath);
+    if (directory.exists) {
+      directory.delete();
+    }
+  } catch {
+    // best-effort cleanup; the DB row (deleted separately) is the source of
+    // truth for what the app shows, so a stray directory on disk is harmless
+  }
+}

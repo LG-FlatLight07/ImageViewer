@@ -14,12 +14,12 @@ export const ALL_ANCHORS: Anchor[] = [
 
 export const DEFAULT_ANCHOR: Anchor = 'bottomRight';
 
+export type Arrangement = 'horizontal' | 'vertical';
+
+export const DEFAULT_ARRANGEMENT: Arrangement = 'horizontal';
+
 type Size = { width: number; height: number };
 export type Point = { x: number; y: number };
-
-export function isVerticalAnchor(anchor: Anchor): boolean {
-  return anchor === 'left' || anchor === 'right';
-}
 
 /**
  * Top-left origin (in the containing area's coordinate space) where a group of

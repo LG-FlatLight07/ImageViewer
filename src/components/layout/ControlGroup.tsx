@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { useLayoutStore } from '../../store/layoutStore';
@@ -9,8 +10,8 @@ import { useDraggableBounds } from './DraggableLayoutArea';
 import {
   ALL_ANCHORS,
   DEFAULT_ANCHOR,
+  DEFAULT_ARRANGEMENT,
   getAnchorOrigin,
-  isVerticalAnchor,
   type Anchor,
 } from './anchors';
 
@@ -22,18 +23,38 @@ type Size = { width: number; height: number };
 type ControlGroupProps = {
   screenId: string;
   children: React.ReactNode;
+  /**
+   * 'buttons' (default) is a compact pill that can be arranged as a row or a
+   * column. 'bar' is a full-width strip (address bar, tab bar) that only
+   * supports repositioning, since a single bar has nothing to rearrange.
+   */
+  variant?: 'buttons' | 'bar';
+  /** Anchor used the first time this screenId has no saved layout yet. */
+  defaultAnchor?: Anchor;
 };
 
-export function ControlGroup({ screenId, children }: ControlGroupProps) {
+export function ControlGroup({
+  screenId,
+  children,
+  variant = 'buttons',
+  defaultAnchor = DEFAULT_ANCHOR,
+}: ControlGroupProps) {
   const { colors } = useAppTheme();
   const editMode = useLayoutStore((state) => state.editMode);
-  const anchor = useLayoutStore((state) => state.anchors[screenId]) ?? DEFAULT_ANCHOR;
+  const storedLayout = useLayoutStore((state) => state.layouts[screenId]);
+  const anchor = storedLayout?.anchor ?? defaultAnchor;
+  const arrangement = storedLayout?.arrangement ?? DEFAULT_ARRANGEMENT;
   const setAnchor = useLayoutStore((state) => state.setAnchor);
+  const setArrangement = useLayoutStore((state) => state.setArrangement);
   const bounds = useDraggableBounds();
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [dragging, setDragging] = useState(false);
 
-  const origin = getAnchorOrigin(anchor, bounds, size, MARGIN);
+  const isBar = variant === 'bar';
+  const barWidth = bounds.width > 0 ? Math.max(bounds.width - MARGIN * 2, 0) : size.width;
+  const effectiveSize = isBar ? { width: barWidth, height: size.height } : size;
+
+  const origin = getAnchorOrigin(anchor, bounds, effectiveSize, MARGIN);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const startX = useSharedValue(0);
@@ -48,20 +69,20 @@ export function ControlGroup({ screenId, children }: ControlGroupProps) {
     setDragging(false);
     translateX.value = 0;
     translateY.value = 0;
-    if (bounds.width === 0 || bounds.height === 0 || size.width === 0) {
+    if (bounds.width === 0 || bounds.height === 0 || effectiveSize.width === 0) {
       return;
     }
     const currentCenter = {
-      x: origin.x + size.width / 2 + dx,
-      y: origin.y + size.height / 2 + dy,
+      x: origin.x + effectiveSize.width / 2 + dx,
+      y: origin.y + effectiveSize.height / 2 + dy,
     };
     let nearestAnchor: Anchor = anchor;
     let nearestDistance = Infinity;
     for (const candidate of ALL_ANCHORS) {
-      const candidateOrigin = getAnchorOrigin(candidate, bounds, size, MARGIN);
+      const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, MARGIN);
       const candidateCenter = {
-        x: candidateOrigin.x + size.width / 2,
-        y: candidateOrigin.y + size.height / 2,
+        x: candidateOrigin.x + effectiveSize.width / 2,
+        y: candidateOrigin.y + effectiveSize.height / 2,
       };
       const distance = Math.hypot(
         candidateCenter.x - currentCenter.x,
@@ -98,23 +119,50 @@ export function ControlGroup({ screenId, children }: ControlGroupProps) {
     <>
       <GestureDetector gesture={pan}>
         <Animated.View
-          style={[styles.container, { top: origin.y, left: origin.x }, animatedStyle]}
+          style={[
+            styles.container,
+            { top: origin.y, left: origin.x },
+            isBar && { width: barWidth },
+            animatedStyle,
+          ]}
           onLayout={handleLayout}
         >
           <View
             style={[
-              styles.group,
-              { backgroundColor: colors.card },
-              isVerticalAnchor(anchor) ? styles.groupVertical : styles.groupHorizontal,
+              isBar ? styles.groupBar : styles.group,
+              !isBar && { backgroundColor: colors.card },
+              !isBar &&
+                (arrangement === 'vertical' ? styles.groupVertical : styles.groupHorizontal),
               editMode && [styles.groupEditing, { borderColor: colors.primary }],
             ]}
           >
             {children}
           </View>
+          {editMode && !isBar && (
+            <TouchableOpacity
+              style={[styles.arrangeButton, { backgroundColor: colors.primary }]}
+              onPress={() =>
+                setArrangement(screenId, arrangement === 'horizontal' ? 'vertical' : 'horizontal')
+              }
+              accessibilityLabel="toggle-arrangement"
+              hitSlop={6}
+            >
+              <Ionicons
+                name={arrangement === 'horizontal' ? 'swap-horizontal' : 'swap-vertical'}
+                size={14}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </GestureDetector>
-      {editMode && dragging && bounds.width > 0 && size.width > 0 && (
-        <AnchorTargets bounds={bounds} size={size} current={anchor} activeColor={colors.primary} />
+      {editMode && dragging && bounds.width > 0 && effectiveSize.width > 0 && (
+        <AnchorTargets
+          bounds={bounds}
+          size={effectiveSize}
+          current={anchor}
+          activeColor={colors.primary}
+        />
       )}
     </>
   );
@@ -167,6 +215,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  groupBar: {
+    width: '100%',
+  },
   groupHorizontal: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -180,6 +231,21 @@ const styles = StyleSheet.create({
   groupEditing: {
     borderWidth: 2,
     borderStyle: 'dashed',
+  },
+  arrangeButton: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 5,
   },
   targetDot: {
     position: 'absolute',

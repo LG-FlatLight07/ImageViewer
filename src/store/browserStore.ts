@@ -10,12 +10,11 @@ export type BrowserTab = {
   canGoBack: boolean;
   canGoForward: boolean;
   loading: boolean;
-  privateMode: boolean;
 };
 
 let tabIdCounter = 0;
 
-function createTab(url: string = DEFAULT_URL, privateMode = false): BrowserTab {
+function createTab(url: string = DEFAULT_URL): BrowserTab {
   tabIdCounter += 1;
   return {
     id: `tab-${Date.now()}-${tabIdCounter}`,
@@ -25,7 +24,6 @@ function createTab(url: string = DEFAULT_URL, privateMode = false): BrowserTab {
     canGoBack: false,
     canGoForward: false,
     loading: false,
-    privateMode,
   };
 }
 
@@ -36,14 +34,13 @@ function updateTab(tabs: BrowserTab[], id: string, patch: Partial<BrowserTab>): 
 type BrowserState = {
   tabs: BrowserTab[];
   activeTabId: string;
-  openTab: (url?: string, privateMode?: boolean) => void;
+  openTab: (url?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string) => void;
   setUrl: (url: string) => void;
   setInputValue: (value: string) => void;
   setNavigationState: (state: { canGoBack: boolean; canGoForward: boolean; title: string }) => void;
   setLoading: (loading: boolean) => void;
-  setPrivateMode: (privateMode: boolean) => void;
 };
 
 const initialTab = createTab();
@@ -52,8 +49,8 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
 
-  openTab: (url = DEFAULT_URL, privateMode = false) => {
-    const tab = createTab(url, privateMode);
+  openTab: (url = DEFAULT_URL) => {
+    const tab = createTab(url);
     set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }));
   },
 
@@ -93,11 +90,6 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   setLoading: (loading) =>
     set((state) => ({
       tabs: updateTab(state.tabs, state.activeTabId, { loading }),
-    })),
-
-  setPrivateMode: (privateMode) =>
-    set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { privateMode }),
     })),
 }));
 

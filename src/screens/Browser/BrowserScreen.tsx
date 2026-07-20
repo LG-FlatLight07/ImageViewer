@@ -9,11 +9,10 @@ import { useSQLiteContext } from 'expo-sqlite';
 
 import { URLBar } from '../../components/URLBar';
 import { BrowserTabBar } from '../../components/BrowserTabBar';
-import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
 import { useBrowserStore, useActiveBrowserTab } from '../../store/browserStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { SEARCH_ENGINES, useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
@@ -23,7 +22,8 @@ import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 import { useAppTheme } from '../../theme/theme';
 
-const SCREEN_ID = 'browser';
+const BUTTONS_SCREEN_ID = 'browser.buttons';
+const CHROME_SCREEN_ID = 'browser.chrome';
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
@@ -32,6 +32,7 @@ export function BrowserScreen() {
   const db = useSQLiteContext();
   const { colors } = useAppTheme();
   const searchEngine = useSettingsStore((state) => state.searchEngine);
+  const disableHistory = useSettingsStore((state) => state.disableHistory);
   const tabs = useBrowserStore((state) => state.tabs);
   const activeTabId = useBrowserStore((state) => state.activeTabId);
   const activeTab = useActiveBrowserTab();
@@ -40,15 +41,13 @@ export function BrowserScreen() {
     setInputValue,
     setNavigationState,
     setLoading,
-    setPrivateMode,
     openTab,
     closeTab,
     setActiveTabId,
   } = useBrowserStore();
-  const { url, inputValue, title, canGoBack, canGoForward, loading, privateMode } = activeTab;
+  const { url, inputValue, title, canGoBack, canGoForward, loading } = activeTab;
 
   const [bookmarked, setBookmarked] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +76,7 @@ export function BrowserScreen() {
     });
     setInputValue(navState.url);
     setLoading(navState.loading);
-    if (!privateMode && !navState.loading && navState.url) {
+    if (!disableHistory && !navState.loading && navState.url) {
       addHistoryEntry(db, { url: navState.url, title: navState.title || navState.url });
     }
   };
@@ -94,6 +93,11 @@ export function BrowserScreen() {
       await addBookmark(db, { url, title: title || url });
       setBookmarked(true);
     }
+  };
+
+  const handleNewTab = () => {
+    const engine = SEARCH_ENGINES.find((e) => e.key === searchEngine);
+    openTab(engine?.homeUrl);
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -115,25 +119,6 @@ export function BrowserScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
-      <View style={styles.urlBarWrapper}>
-        <URLBar
-          value={inputValue}
-          loading={loading}
-          onChangeValue={setInputValue}
-          onSubmit={handleSubmit}
-          onReload={() =>
-            loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload()
-          }
-        />
-        <BrowserTabBar
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelectTab={setActiveTabId}
-          onCloseTab={closeTab}
-          onNewTab={() => openTab()}
-        />
-      </View>
-
       <DraggableLayoutArea>
         <WebView
           key={activeTabId}
@@ -143,11 +128,11 @@ export function BrowserScreen() {
           onNavigationStateChange={handleNavigationStateChange}
           onMessage={handleMessage}
           startInLoadingState
-          incognito={privateMode}
+          incognito={disableHistory}
         />
-        {privateMode && <View pointerEvents="none" style={styles.privateModeBorder} />}
+        {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
-        <ControlGroup screenId={SCREEN_ID}>
+        <ControlGroup screenId={BUTTONS_SCREEN_ID}>
           <TouchableOpacity
             style={styles.toolbarButton}
             disabled={!canGoBack}
@@ -173,46 +158,31 @@ export function BrowserScreen() {
           >
             <Ionicons name="download-outline" size={22} color="#333" />
           </TouchableOpacity>
+        </ControlGroup>
 
-          <TouchableOpacity
-            style={styles.toolbarButton}
-            onPress={handleToggleBookmark}
-            accessibilityLabel="toggle-bookmark"
-          >
-            <Ionicons name={bookmarked ? 'star' : 'star-outline'} size={22} color="#f6c453" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolbarButton, privateMode && styles.toolbarButtonActive]}
-            onPress={() => setPrivateMode(!privateMode)}
-            accessibilityLabel="toggle-private-mode"
-          >
-            <Ionicons
-              name={privateMode ? 'eye-off' : 'eye-off-outline'}
-              size={22}
-              color={privateMode ? '#fff' : '#333'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toolbarButton}
-            onPress={() => setMenuVisible(true)}
-            accessibilityLabel="open-menu"
-          >
-            <Ionicons name="menu" size={22} color="#333" />
-          </TouchableOpacity>
+        <ControlGroup screenId={CHROME_SCREEN_ID} variant="bar" defaultAnchor="top">
+          <URLBar
+            value={inputValue}
+            loading={loading}
+            bookmarked={bookmarked}
+            onChangeValue={setInputValue}
+            onSubmit={handleSubmit}
+            onReload={() =>
+              loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload()
+            }
+            onToggleBookmark={handleToggleBookmark}
+            onOpenBookmarks={() => navigation.navigate('Bookmarks')}
+            onOpenHistory={() => navigation.navigate('History')}
+          />
+          <BrowserTabBar
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={setActiveTabId}
+            onCloseTab={closeTab}
+            onNewTab={handleNewTab}
+          />
         </ControlGroup>
       </DraggableLayoutArea>
-
-      <ActionMenuModal
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        actions={[
-          { label: '新しいプライベートタブ', onPress: () => openTab(undefined, true) },
-          { label: '履歴', onPress: () => navigation.navigate('History') },
-          { label: 'ブックマーク', onPress: () => navigation.navigate('Bookmarks') },
-        ]}
-      />
     </SafeAreaView>
   );
 }
@@ -220,9 +190,6 @@ export function BrowserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  urlBarWrapper: {
-    zIndex: 1,
   },
   webview: {
     flex: 1,
@@ -248,8 +215,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 3,
-  },
-  toolbarButtonActive: {
-    backgroundColor: '#6d3fc0',
   },
 });

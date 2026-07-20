@@ -10,13 +10,14 @@ export type Folder = {
   dirPath: string | null;
   sourceUrl: string | null;
   createdAt: number;
+  viewCount: number;
 };
 
 export type FolderWithTags = Folder & {
   tags: Tag[];
 };
 
-export type FolderSortKey = 'name' | 'createdAt' | 'tagName';
+export type FolderSortKey = 'name' | 'createdAt' | 'tagName' | 'viewCount';
 
 export type HistoryEntry = {
   id: string;

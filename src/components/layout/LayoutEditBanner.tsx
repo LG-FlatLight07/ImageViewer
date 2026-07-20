@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLayoutStore } from '../../store/layoutStore';
@@ -14,14 +14,21 @@ export function LayoutEditBanner() {
     return null;
   }
 
+  const confirmReset = () => {
+    Alert.alert('レイアウトをリセットしますか?', undefined, [
+      { text: 'いいえ', style: 'cancel' },
+      { text: 'はい', style: 'destructive', onPress: resetAll },
+    ]);
+  };
+
   return (
     <View style={[styles.overlay, { top: insets.top + 8 }]} pointerEvents="box-none">
       <View style={styles.banner}>
         <Text style={styles.text}>
-          レイアウト編集中: ボタン群をドラッグして8方向のいずれかに配置できます
+          レイアウト編集中: ドラッグで位置を移動、右上の切替ボタンで並び方を変更できます
         </Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.button} onPress={resetAll}>
+          <TouchableOpacity style={styles.button} onPress={confirmReset}>
             <Text style={styles.buttonText}>リセット</Text>
           </TouchableOpacity>
           <TouchableOpacity

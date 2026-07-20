@@ -8,22 +8,45 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 export const SEARCH_ENGINES: {
   key: SearchEngineKey;
   label: string;
+  homeUrl: string;
   searchUrl: (query: string) => string;
 }[] = [
-  { key: 'google', label: 'Google', searchUrl: (q) => `https://www.google.com/search?q=${q}` },
-  { key: 'bing', label: 'Bing', searchUrl: (q) => `https://www.bing.com/search?q=${q}` },
-  { key: 'yahoo', label: 'Yahoo!', searchUrl: (q) => `https://search.yahoo.co.jp/search?p=${q}` },
-  { key: 'duckduckgo', label: 'DuckDuckGo', searchUrl: (q) => `https://duckduckgo.com/?q=${q}` },
+  {
+    key: 'google',
+    label: 'Google',
+    homeUrl: 'https://www.google.com',
+    searchUrl: (q) => `https://www.google.com/search?q=${q}`,
+  },
+  {
+    key: 'bing',
+    label: 'Bing',
+    homeUrl: 'https://www.bing.com',
+    searchUrl: (q) => `https://www.bing.com/search?q=${q}`,
+  },
+  {
+    key: 'yahoo',
+    label: 'Yahoo!',
+    homeUrl: 'https://www.yahoo.co.jp',
+    searchUrl: (q) => `https://search.yahoo.co.jp/search?p=${q}`,
+  },
+  {
+    key: 'duckduckgo',
+    label: 'DuckDuckGo',
+    homeUrl: 'https://duckduckgo.com',
+    searchUrl: (q) => `https://duckduckgo.com/?q=${q}`,
+  },
 ];
 
 type SettingsState = {
   searchEngine: SearchEngineKey;
   themePreference: ThemePreference;
   folderNameExclusions: string[];
+  disableHistory: boolean;
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
   addFolderNameExclusion: (text: string) => void;
   removeFolderNameExclusion: (text: string) => void;
+  setDisableHistory: (disableHistory: boolean) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -32,6 +55,7 @@ export const useSettingsStore = create<SettingsState>()(
       searchEngine: 'google',
       themePreference: 'system',
       folderNameExclusions: [],
+      disableHistory: false,
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
       addFolderNameExclusion: (text) =>
@@ -46,6 +70,7 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           folderNameExclusions: state.folderNameExclusions.filter((entry) => entry !== text),
         })),
+      setDisableHistory: (disableHistory) => set({ disableHistory }),
     }),
     {
       name: 'settings-store',

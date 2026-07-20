@@ -10,6 +10,7 @@ type FolderRow = {
   dir_path: string | null;
   source_url: string | null;
   created_at: number;
+  view_count: number;
 };
 
 type TagRow = {
@@ -25,6 +26,7 @@ function mapFolderRow(row: FolderRow): Folder {
     dirPath: row.dir_path,
     sourceUrl: row.source_url,
     createdAt: row.created_at,
+    viewCount: row.view_count,
   };
 }
 
@@ -77,6 +79,7 @@ export async function createFolder(
     dirPath: input.dirPath,
     sourceUrl: input.sourceUrl ?? null,
     createdAt,
+    viewCount: 0,
   };
 }
 
@@ -97,6 +100,8 @@ export async function listFolders(
       'ORDER BY (min_tag_name IS NULL) ASC, min_tag_name COLLATE NOCASE ASC, f.name COLLATE NOCASE ASC';
   } else if (options.sortKey === 'createdAt') {
     orderByClause = 'ORDER BY f.created_at DESC';
+  } else if (options.sortKey === 'viewCount') {
+    orderByClause = 'ORDER BY f.view_count DESC, f.created_at DESC';
   } else {
     orderByClause = 'ORDER BY f.name COLLATE NOCASE ASC';
   }
@@ -179,6 +184,18 @@ export async function moveFolder(
   newParentId: string | null,
 ): Promise<void> {
   await db.runAsync('UPDATE folders SET parent_id = ? WHERE id = ?', newParentId, folderId);
+}
+
+export async function renameFolder(db: SQLiteDatabase, id: string, name: string): Promise<void> {
+  await db.runAsync('UPDATE folders SET name = ? WHERE id = ?', name, id);
+}
+
+export async function deleteFolder(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync('DELETE FROM folders WHERE id = ?', id);
+}
+
+export async function incrementFolderViewCount(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync('UPDATE folders SET view_count = view_count + 1 WHERE id = ?', id);
 }
 
 export async function getFolderName(db: SQLiteDatabase, id: string | null): Promise<string> {

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -47,6 +47,9 @@ const MIGRATIONS: Record<number, string> = {
 
     CREATE INDEX IF NOT EXISTS idx_history_visited_at ON history(visited_at);
     CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
+  `,
+  3: `
+    ALTER TABLE folders ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;
   `,
 };
 
