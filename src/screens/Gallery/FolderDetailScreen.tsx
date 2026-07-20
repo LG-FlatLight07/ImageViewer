@@ -15,6 +15,7 @@ import { FolderRow } from '../../components/FolderRow';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
+import { useAppTheme } from '../../theme/theme';
 
 const IMAGE_COLUMNS = 3;
 
@@ -27,6 +28,7 @@ export function FolderDetailScreen() {
   const rootNavigation = useRootNavigation();
   const route = useRoute<RouteProp<GalleryStackParamList, 'FolderDetail'>>();
   const { folderId } = route.params;
+  const { colors } = useAppTheme();
 
   const [folder, setFolder] = useState<FolderWithTags | null>(null);
   const [subfolders, setSubfolders] = useState<FolderWithTags[]>([]);
@@ -60,8 +62,11 @@ export function FolderDetailScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.toolbar}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['bottom']}
+    >
+      <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity style={styles.toolbarButton} onPress={() => setTaggingTarget(folder)}>
           <Ionicons name="pricetag-outline" size={16} color="#4c8bf5" />
           <Text style={styles.toolbarButtonText}>タグを編集</Text>
@@ -112,7 +117,7 @@ export function FolderDetailScreen() {
           }
           return (
             <TouchableOpacity
-              style={styles.imageCell}
+              style={[styles.imageCell, { backgroundColor: colors.surface }]}
               onPress={() =>
                 navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
               }
@@ -122,7 +127,11 @@ export function FolderDetailScreen() {
           );
         }}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<Text style={styles.emptyText}>このフォルダは空です</Text>}
+        ListEmptyComponent={
+          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+            このフォルダは空です
+          </Text>
+        }
       />
 
       <ActionMenuModal

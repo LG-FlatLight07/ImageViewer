@@ -16,6 +16,7 @@ import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { DraggableControl } from '../../components/layout/DraggableControl';
+import { useAppTheme } from '../../theme/theme';
 
 const SORT_OPTIONS: { key: FolderSortKey; label: string }[] = [
   { key: 'name', label: '名前順' },
@@ -27,6 +28,7 @@ export function FolderListScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
   const rootNavigation = useRootNavigation();
+  const { colors } = useAppTheme();
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,20 +49,24 @@ export function FolderListScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['top']}
+    >
       <DraggableLayoutArea>
         <DraggableControl
           screenId="gallery.folderList"
           controlId="searchBar"
           defaultPosition={{ x: 12, y: 8 }}
         >
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={16} color="#888" />
+          <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
+            <Ionicons name="search" size={16} color={colors.secondaryText} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.text }]}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="フォルダ名・タグ名で検索"
+              placeholderTextColor={colors.secondaryText}
             />
           </View>
         </DraggableControl>
@@ -74,12 +80,17 @@ export function FolderListScreen() {
             {SORT_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.key}
-                style={[styles.sortButton, sortKey === option.key && styles.sortButtonActive]}
+                style={[
+                  styles.sortButton,
+                  { backgroundColor: colors.surface },
+                  sortKey === option.key && { backgroundColor: colors.primary },
+                ]}
                 onPress={() => setSortKey(option.key)}
               >
                 <Text
                   style={[
                     styles.sortButtonText,
+                    { color: colors.secondaryText },
                     sortKey === option.key && styles.sortButtonTextActive,
                   ]}
                 >
@@ -95,7 +106,10 @@ export function FolderListScreen() {
           controlId="newFolderButton"
           defaultPosition={{ x: 300, y: 8 }}
         >
-          <TouchableOpacity style={styles.newFolderButton} onPress={() => setCreatingFolder(true)}>
+          <TouchableOpacity
+            style={[styles.newFolderButton, { backgroundColor: colors.primary }]}
+            onPress={() => setCreatingFolder(true)}
+          >
             <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </DraggableControl>
@@ -112,7 +126,11 @@ export function FolderListScreen() {
               onOpenMenu={() => setMenuFolder(item)}
             />
           )}
-          ListEmptyComponent={<Text style={styles.emptyText}>フォルダがありません</Text>}
+          ListEmptyComponent={
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              フォルダがありません
+            </Text>
+          }
         />
       </DraggableLayoutArea>
 

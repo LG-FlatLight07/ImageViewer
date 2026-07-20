@@ -1,6 +1,8 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { useAppTheme } from '../theme/theme';
+
 export type MenuAction = {
   label: string;
   destructive?: boolean;
@@ -14,26 +16,34 @@ type ActionMenuModalProps = {
 };
 
 export function ActionMenuModal({ visible, onClose, actions }: ActionMenuModalProps) {
+  const { colors } = useAppTheme();
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
           {actions.map((action) => (
             <TouchableOpacity
               key={action.label}
-              style={styles.actionRow}
+              style={[styles.actionRow, { borderBottomColor: colors.border }]}
               onPress={() => {
                 onClose();
                 action.onPress();
               }}
             >
-              <Text style={[styles.actionLabel, action.destructive && styles.destructiveLabel]}>
+              <Text
+                style={[
+                  styles.actionLabel,
+                  { color: colors.text },
+                  action.destructive && styles.destructiveLabel,
+                ]}
+              >
                 {action.label}
               </Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={[styles.actionRow, styles.cancelRow]} onPress={onClose}>
-            <Text style={styles.cancelLabel}>キャンセル</Text>
+            <Text style={[styles.cancelLabel, { color: colors.secondaryText }]}>キャンセル</Text>
           </TouchableOpacity>
         </View>
       </Pressable>
@@ -48,7 +58,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingBottom: 24,
@@ -58,11 +67,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
   },
   actionLabel: {
     fontSize: 16,
-    color: '#222',
     textAlign: 'center',
   },
   destructiveLabel: {
@@ -74,7 +81,6 @@ const styles = StyleSheet.create({
   },
   cancelLabel: {
     fontSize: 16,
-    color: '#888',
     textAlign: 'center',
   },
 });

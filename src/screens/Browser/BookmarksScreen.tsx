@@ -10,11 +10,13 @@ import type { BrowserStackParamList } from '../../navigation/types';
 import type { Bookmark } from '../../db/types';
 import { listBookmarks, removeBookmark } from '../../db/bookmarksRepository';
 import { useBrowserStore } from '../../store/browserStore';
+import { useAppTheme } from '../../theme/theme';
 
 export function BookmarksScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<BrowserStackParamList>>();
   const setUrl = useBrowserStore((state) => state.setUrl);
+  const { colors } = useAppTheme();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
   const reload = useCallback(async () => {
@@ -33,21 +35,24 @@ export function BookmarksScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>ブックマーク</Text>
-      </View>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['bottom']}
+    >
       <FlatList
         data={bookmarks}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.row} onPress={() => handleOpen(item)}>
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: colors.border }]}
+            onPress={() => handleOpen(item)}
+          >
             <Ionicons name="star" size={18} color="#f6c453" />
             <View style={styles.rowTextGroup}>
-              <Text style={styles.rowTitle} numberOfLines={1}>
+              <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>
                 {item.title || item.url}
               </Text>
-              <Text style={styles.rowUrl} numberOfLines={1}>
+              <Text style={[styles.rowUrl, { color: colors.secondaryText }]} numberOfLines={1}>
                 {item.url}
               </Text>
             </View>
@@ -58,11 +63,15 @@ export function BookmarksScreen() {
               }}
               hitSlop={8}
             >
-              <Ionicons name="close" size={18} color="#aaa" />
+              <Ionicons name="close" size={18} color={colors.secondaryText} />
             </TouchableOpacity>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>ブックマークはありません</Text>}
+        ListEmptyComponent={
+          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+            ブックマークはありません
+          </Text>
+        }
       />
     </SafeAreaView>
   );
@@ -71,20 +80,6 @@ export function BookmarksScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ddd',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
@@ -92,7 +87,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
   },
   rowTextGroup: {
     flex: 1,
@@ -101,16 +95,13 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     fontSize: 15,
-    color: '#222',
   },
   rowUrl: {
     fontSize: 12,
-    color: '#888',
     marginTop: 2,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#888',
     marginTop: 60,
   },
 });

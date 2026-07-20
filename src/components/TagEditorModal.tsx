@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useAppTheme } from '../theme/theme';
+
 type TagEditorModalProps = {
   visible: boolean;
   folderName: string;
@@ -25,6 +27,7 @@ export function TagEditorModal({
   onCancel,
   onSubmit,
 }: TagEditorModalProps) {
+  const { colors } = useAppTheme();
   const [tags, setTags] = useState<string[]>(initialTags);
   const [inputValue, setInputValue] = useState('');
 
@@ -54,9 +57,12 @@ export function TagEditorModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>タグを編集</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
+        <Pressable
+          style={[styles.card, { backgroundColor: colors.card }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>タグを編集</Text>
+          <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={1}>
             {folderName}
           </Text>
 
@@ -72,20 +78,21 @@ export function TagEditorModal({
           </View>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, { borderColor: colors.border, color: colors.text }]}
             value={inputValue}
             onChangeText={setInputValue}
             onSubmitEditing={commitInput}
             placeholder="タグ名を入力してEnter"
+            placeholderTextColor={colors.secondaryText}
             returnKeyType="done"
           />
 
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={onCancel}>
-              <Text style={styles.buttonText}>キャンセル</Text>
+              <Text style={[styles.buttonText, { color: colors.secondaryText }]}>キャンセル</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.button, styles.submitButton]}
+              style={[styles.button, styles.submitButton, { backgroundColor: colors.primary }]}
               onPress={() => {
                 commitInput();
                 onSubmit(
@@ -113,7 +120,6 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '88%',
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
   },
@@ -123,7 +129,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12,
-    color: '#888',
     marginBottom: 10,
   },
   chipRow: {
@@ -147,7 +152,6 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ccc',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -164,10 +168,8 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    color: '#666',
   },
   submitButton: {
-    backgroundColor: '#4c8bf5',
     borderRadius: 8,
   },
   submitButtonText: {

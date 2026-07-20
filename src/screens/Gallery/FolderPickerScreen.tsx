@@ -8,12 +8,14 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { RootStackParamList } from '../../navigation/types';
 import type { FolderWithTags } from '../../db/types';
 import { getFolderName, listFolders, moveFolder } from '../../db/foldersRepository';
+import { useAppTheme } from '../../theme/theme';
 
 export function FolderPickerScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'FolderPicker'>>();
   const { movingFolderId } = route.params;
+  const { colors } = useAppTheme();
 
   const [pathStack, setPathStack] = useState<(string | null)[]>([null]);
   const currentParentId = pathStack[pathStack.length - 1];
@@ -38,12 +40,12 @@ export function FolderPickerScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="cancel">
-          <Ionicons name="close" size={24} color="#333" />
+          <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>移動先を選択</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>移動先を選択</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -53,11 +55,11 @@ export function FolderPickerScreen() {
             onPress={() => setPathStack((prev) => prev.slice(0, -1))}
             style={styles.upButton}
           >
-            <Ionicons name="arrow-up" size={16} color="#4c8bf5" />
-            <Text style={styles.upButtonText}>上の階層へ</Text>
+            <Ionicons name="arrow-up" size={16} color={colors.primary} />
+            <Text style={[styles.upButtonText, { color: colors.primary }]}>上の階層へ</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.currentPath} numberOfLines={1}>
+        <Text style={[styles.currentPath, { color: colors.secondaryText }]} numberOfLines={1}>
           現在地: {currentName}
         </Text>
       </View>
@@ -67,21 +69,28 @@ export function FolderPickerScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { borderBottomColor: colors.border }]}
             onPress={() => setPathStack((prev) => [...prev, item.id])}
           >
             <Ionicons name="folder" size={22} color="#f6c453" />
-            <Text style={styles.rowText} numberOfLines={1}>
+            <Text style={[styles.rowText, { color: colors.text }]} numberOfLines={1}>
               {item.name}
             </Text>
-            <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>サブフォルダはありません</Text>}
+        ListEmptyComponent={
+          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+            サブフォルダはありません
+          </Text>
+        }
       />
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.moveButton} onPress={handleMoveHere}>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.moveButton, { backgroundColor: colors.primary }]}
+          onPress={handleMoveHere}
+        >
           <Text style={styles.moveButtonText}>「{currentName}」に移動</Text>
         </TouchableOpacity>
       </View>

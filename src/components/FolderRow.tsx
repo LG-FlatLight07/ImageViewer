@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { FolderWithTags } from '../db/types';
+import { useAppTheme } from '../theme/theme';
 
 type FolderRowProps = {
   folder: FolderWithTags;
@@ -11,11 +12,17 @@ type FolderRowProps = {
 };
 
 export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
+  const { colors } = useAppTheme();
+
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <Ionicons name="folder" size={28} color="#f6c453" />
       <View style={styles.textGroup}>
-        <Text style={styles.name} numberOfLines={1}>
+        <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {folder.name}
         </Text>
         {folder.tags.length > 0 && (
@@ -29,7 +36,7 @@ export function FolderRow({ folder, onPress, onOpenMenu }: FolderRowProps) {
         )}
       </View>
       <TouchableOpacity style={styles.menuButton} onPress={onOpenMenu} hitSlop={8}>
-        <Ionicons name="ellipsis-vertical" size={18} color="#888" />
+        <Ionicons name="ellipsis-vertical" size={18} color={colors.secondaryText} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -42,7 +49,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
   },
   textGroup: {
     flex: 1,
@@ -50,7 +56,6 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 15,
-    color: '#222',
   },
   tagRow: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import { ImageSelectionScreen } from '../screens/Browser/ImageSelectionScreen';
 import { GalleryNavigator } from './GalleryNavigator';
 import { FolderPickerScreen } from '../screens/Gallery/FolderPickerScreen';
 import { SettingsScreen } from '../screens/Settings/SettingsScreen';
+import { useAppTheme } from '../theme/theme';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -52,8 +53,10 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
+  const { navigationTheme } = useAppTheme();
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <RootStack.Navigator>
         <RootStack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
         <RootStack.Screen

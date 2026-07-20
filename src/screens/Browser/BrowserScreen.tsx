@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { DraggableControl } from '../../components/layout/DraggableControl';
 import { useBrowserStore } from '../../store/browserStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
@@ -19,6 +20,7 @@ import { useRootNavigation } from '../../navigation/useRootNavigation';
 import type { BrowserStackParamList } from '../../navigation/types';
 import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
+import { useAppTheme } from '../../theme/theme';
 
 const SCREEN_ID = 'browser';
 
@@ -27,6 +29,8 @@ export function BrowserScreen() {
   const rootNavigation = useRootNavigation();
   const navigation = useNavigation<NativeStackNavigationProp<BrowserStackParamList>>();
   const db = useSQLiteContext();
+  const { colors } = useAppTheme();
+  const searchEngine = useSettingsStore((state) => state.searchEngine);
   const {
     url,
     inputValue,
@@ -42,6 +46,7 @@ export function BrowserScreen() {
 
   const [bookmarked, setBookmarked] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [privateMode, setPrivateMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +61,7 @@ export function BrowserScreen() {
   }, [db, url]);
 
   const handleSubmit = () => {
-    const resolved = resolveInputToUrl(inputValue);
+    const resolved = resolveInputToUrl(inputValue, searchEngine);
     if (resolved) {
       setUrl(resolved);
     }
@@ -70,7 +75,7 @@ export function BrowserScreen() {
     });
     setInputValue(navState.url);
     setLoading(navState.loading);
-    if (!navState.loading && navState.url) {
+    if (!privateMode && !navState.loading && navState.url) {
       addHistoryEntry(db, { url: navState.url, title: navState.title || navState.url });
     }
   };
@@ -104,7 +109,10 @@ export function BrowserScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['top']}
+    >
       <DraggableLayoutArea>
         <WebView
           ref={webViewRef}
@@ -113,7 +121,9 @@ export function BrowserScreen() {
           onNavigationStateChange={handleNavigationStateChange}
           onMessage={handleMessage}
           startInLoadingState
+          incognito={privateMode}
         />
+        {privateMode && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
         <DraggableControl screenId={SCREEN_ID} controlId="urlBar" defaultPosition={{ x: 8, y: 8 }}>
           <URLBar
@@ -187,8 +197,26 @@ export function BrowserScreen() {
 
         <DraggableControl
           screenId={SCREEN_ID}
-          controlId="menuButton"
+          controlId="privateModeButton"
           defaultPosition={{ x: 200, y: 56 }}
+        >
+          <TouchableOpacity
+            style={[styles.toolbarButton, privateMode && styles.toolbarButtonActive]}
+            onPress={() => setPrivateMode((prev) => !prev)}
+            accessibilityLabel="toggle-private-mode"
+          >
+            <Ionicons
+              name={privateMode ? 'eye-off' : 'eye-off-outline'}
+              size={22}
+              color={privateMode ? '#fff' : '#333'}
+            />
+          </TouchableOpacity>
+        </DraggableControl>
+
+        <DraggableControl
+          screenId={SCREEN_ID}
+          controlId="menuButton"
+          defaultPosition={{ x: 248, y: 56 }}
         >
           <TouchableOpacity
             style={styles.toolbarButton}
@@ -215,10 +243,18 @@ export function BrowserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   webview: {
     flex: 1,
+  },
+  privateModeBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 3,
+    borderColor: '#6d3fc0',
   },
   toolbarButton: {
     width: 40,
@@ -232,5 +268,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 3,
+  },
+  toolbarButtonActive: {
+    backgroundColor: '#6d3fc0',
   },
 });

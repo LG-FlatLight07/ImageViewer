@@ -17,6 +17,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { RootStackParamList } from '../../navigation/types';
 import type { DetectedImage } from '../../services/imageGrouping';
 import { downloadImagesToNewFolder } from '../../services/downloadService';
+import { useAppTheme } from '../../theme/theme';
 
 const THUMB_SIZE = 100;
 
@@ -24,6 +25,7 @@ export function ImageSelectionScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ImageSelection'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const db = useSQLiteContext();
+  const { colors } = useAppTheme();
   const { pageTitle, sourceUrl, primaryGroup, otherImages } = route.params;
 
   const allImages = useMemo<DetectedImage[]>(
@@ -94,27 +96,33 @@ export function ImageSelectionScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="close">
-          <Ionicons name="close" size={26} color="#333" />
+          <Ionicons name="close" size={26} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
           {pageTitle || sourceUrl}
         </Text>
         <View style={{ width: 26 }} />
       </View>
 
       <View style={styles.actionsRow}>
-        <Text style={styles.selectionCount}>
+        <Text style={[styles.selectionCount, { color: colors.secondaryText }]}>
           {selectedIds.size} / {allImages.length} 選択中
         </Text>
         <View style={styles.actionButtons}>
-          <TouchableOpacity onPress={selectAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>すべて選択</Text>
+          <TouchableOpacity
+            onPress={selectAll}
+            style={[styles.actionButton, { backgroundColor: colors.surface }]}
+          >
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>すべて選択</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={clearAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>選択解除</Text>
+          <TouchableOpacity
+            onPress={clearAll}
+            style={[styles.actionButton, { backgroundColor: colors.surface }]}
+          >
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>選択解除</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -122,7 +130,7 @@ export function ImageSelectionScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {primaryGroup && primaryGroup.images.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
               検出された連番画像 ({primaryGroup.images.length}件)
             </Text>
             <View style={styles.grid}>{primaryGroup.images.map(renderThumbnail)}</View>
@@ -130,18 +138,26 @@ export function ImageSelectionScreen() {
         )}
         {otherImages.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>その他の画像 ({otherImages.length}件)</Text>
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+              その他の画像 ({otherImages.length}件)
+            </Text>
             <View style={styles.grid}>{otherImages.map(renderThumbnail)}</View>
           </>
         )}
         {allImages.length === 0 && (
-          <Text style={styles.emptyText}>広告を除いた保存候補の画像が見つかりませんでした</Text>
+          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+            広告を除いた保存候補の画像が見つかりませんでした
+          </Text>
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.downloadButton, selectedIds.size === 0 && styles.downloadButtonDisabled]}
+          style={[
+            styles.downloadButton,
+            { backgroundColor: colors.primary },
+            selectedIds.size === 0 && styles.downloadButtonDisabled,
+          ]}
           onPress={handleDownload}
           disabled={selectedIds.size === 0 || downloading}
         >

@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 
+import { useAppTheme } from '../theme/theme';
+
 type PromptModalProps = {
   visible: boolean;
   title: string;
@@ -28,6 +30,7 @@ export function PromptModal({
   onCancel,
   onSubmit,
 }: PromptModalProps) {
+  const { colors } = useAppTheme();
   const [value, setValue] = useState(initialValue);
 
   useEffect(() => {
@@ -42,21 +45,25 @@ export function PromptModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>{title}</Text>
+        <Pressable
+          style={[styles.card, { backgroundColor: colors.card }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { borderColor: colors.border, color: colors.text }]}
             value={value}
             onChangeText={setValue}
             placeholder={placeholder}
+            placeholderTextColor={colors.secondaryText}
             autoFocus
           />
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={onCancel}>
-              <Text style={styles.buttonText}>キャンセル</Text>
+              <Text style={[styles.buttonText, { color: colors.secondaryText }]}>キャンセル</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.button, styles.submitButton]}
+              style={[styles.button, styles.submitButton, { backgroundColor: colors.primary }]}
               onPress={() => onSubmit(value)}
             >
               <Text style={[styles.buttonText, styles.submitButtonText]}>{submitLabel}</Text>
@@ -77,7 +84,6 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '85%',
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
   },
@@ -88,7 +94,6 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ccc',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -105,10 +110,8 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    color: '#666',
   },
   submitButton: {
-    backgroundColor: '#4c8bf5',
     borderRadius: 8,
   },
   submitButtonText: {
