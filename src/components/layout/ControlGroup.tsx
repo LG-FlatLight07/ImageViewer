@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,13 +6,15 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-nativ
 
 import { useLayoutStore } from '../../store/layoutStore';
 import { useAppTheme } from '../../theme/theme';
-import { useDraggableBounds } from './DraggableLayoutArea';
+import { useControlGroupRegistry, useDraggableBounds } from './DraggableLayoutArea';
 import {
-  ALL_ANCHORS,
-  DEFAULT_ANCHOR,
+  anchorsByDistance,
   DEFAULT_ARRANGEMENT,
   getAnchorOrigin,
+  rectsOverlap,
+  resolveSemanticAnchor,
   type Anchor,
+  type SemanticAnchor,
 } from './anchors';
 
 const MARGIN = 12;
@@ -29,30 +31,35 @@ type ControlGroupProps = {
    * supports repositioning, since a single bar has nothing to rearrange.
    */
   variant?: 'buttons' | 'bar';
-  /** Anchor used the first time this screenId has no saved layout yet. */
-  defaultAnchor?: Anchor;
+  /** Compass position used the first time this screenId has no saved layout yet. */
+  defaultAnchor?: SemanticAnchor;
+  /** Fires whenever this group's rendered size changes (e.g. so a screen can reserve scroll-content space for it). */
+  onMeasured?: (size: Size) => void;
 };
 
 export function ControlGroup({
   screenId,
   children,
   variant = 'buttons',
-  defaultAnchor = DEFAULT_ANCHOR,
+  defaultAnchor = 'bottomRight',
+  onMeasured,
 }: ControlGroupProps) {
   const { colors } = useAppTheme();
   const editMode = useLayoutStore((state) => state.editMode);
   const storedLayout = useLayoutStore((state) => state.layouts[screenId]);
-  const anchor = storedLayout?.anchor ?? defaultAnchor;
-  const arrangement = storedLayout?.arrangement ?? DEFAULT_ARRANGEMENT;
   const setAnchor = useLayoutStore((state) => state.setAnchor);
   const setArrangement = useLayoutStore((state) => state.setArrangement);
   const bounds = useDraggableBounds();
+  const registry = useControlGroupRegistry();
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [dragging, setDragging] = useState(false);
 
   const isBar = variant === 'bar';
   const barWidth = bounds.width > 0 ? Math.max(bounds.width - MARGIN * 2, 0) : size.width;
   const effectiveSize = isBar ? { width: barWidth, height: size.height } : size;
+  const arrangement = storedLayout?.arrangement ?? DEFAULT_ARRANGEMENT;
+  const anchor =
+    storedLayout?.anchor ?? resolveSemanticAnchor(defaultAnchor, bounds, effectiveSize, MARGIN);
 
   const origin = getAnchorOrigin(anchor, bounds, effectiveSize, MARGIN);
   const translateX = useSharedValue(0);
@@ -63,7 +70,29 @@ export function ControlGroup({
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     setSize({ width, height });
+    onMeasured?.({ width, height });
   };
+
+  useEffect(() => {
+    if (bounds.width === 0 || effectiveSize.width === 0) {
+      return;
+    }
+    registry.register(screenId, {
+      x: origin.x,
+      y: origin.y,
+      width: effectiveSize.width,
+      height: effectiveSize.height,
+    });
+    return () => registry.unregister(screenId);
+  }, [
+    registry,
+    screenId,
+    origin.x,
+    origin.y,
+    effectiveSize.width,
+    effectiveSize.height,
+    bounds.width,
+  ]);
 
   const commitDrop = (dx: number, dy: number) => {
     setDragging(false);
@@ -72,28 +101,23 @@ export function ControlGroup({
     if (bounds.width === 0 || bounds.height === 0 || effectiveSize.width === 0) {
       return;
     }
-    const currentCenter = {
+    const target = {
       x: origin.x + effectiveSize.width / 2 + dx,
       y: origin.y + effectiveSize.height / 2 + dy,
     };
-    let nearestAnchor: Anchor = anchor;
-    let nearestDistance = Infinity;
-    for (const candidate of ALL_ANCHORS) {
+    const candidates = anchorsByDistance(target, bounds, effectiveSize, MARGIN);
+    const others = registry.getOthers(screenId);
+    const nonOverlapping = candidates.find((candidate) => {
       const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, MARGIN);
-      const candidateCenter = {
-        x: candidateOrigin.x + effectiveSize.width / 2,
-        y: candidateOrigin.y + effectiveSize.height / 2,
+      const rect = {
+        x: candidateOrigin.x,
+        y: candidateOrigin.y,
+        width: effectiveSize.width,
+        height: effectiveSize.height,
       };
-      const distance = Math.hypot(
-        candidateCenter.x - currentCenter.x,
-        candidateCenter.y - currentCenter.y,
-      );
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestAnchor = candidate;
-      }
-    }
-    setAnchor(screenId, nearestAnchor);
+      return !others.some((other) => rectsOverlap(rect, other));
+    });
+    setAnchor(screenId, nonOverlapping ?? candidates[0]);
   };
 
   const pan = Gesture.Pan()
@@ -128,6 +152,7 @@ export function ControlGroup({
           onLayout={handleLayout}
         >
           <View
+            pointerEvents={editMode ? 'none' : 'auto'}
             style={[
               isBar ? styles.groupBar : styles.group,
               !isBar && { backgroundColor: colors.card },
@@ -181,18 +206,18 @@ function AnchorTargets({
 }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {ALL_ANCHORS.map((candidate) => {
-        const target = getAnchorOrigin(candidate, bounds, size, MARGIN);
+      {Array.from({ length: 32 }, (_, index) => {
+        const target = getAnchorOrigin(index, bounds, size, MARGIN);
         return (
           <View
-            key={candidate}
+            key={index}
             style={[
               styles.targetDot,
               {
-                left: target.x + size.width / 2 - 8,
-                top: target.y + size.height / 2 - 8,
+                left: target.x + size.width / 2 - 5,
+                top: target.y + size.height / 2 - 5,
               },
-              candidate === current && { backgroundColor: activeColor },
+              index === current && { backgroundColor: activeColor },
             ]}
           />
         );
@@ -249,9 +274,9 @@ const styles = StyleSheet.create({
   },
   targetDot: {
     position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: 'rgba(76,139,245,0.35)',
   },
 });

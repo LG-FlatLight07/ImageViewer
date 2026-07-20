@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { DatabaseProvider } from './src/db/DatabaseProvider';
 import { LayoutEditBanner } from './src/components/layout/LayoutEditBanner';
+import { DownloadProgressBar } from './src/components/DownloadProgressBar';
+import { DownloadCompleteToast } from './src/components/DownloadCompleteToast';
 import { useAppTheme } from './src/theme/theme';
 
 export default function App() {
@@ -16,6 +18,8 @@ export default function App() {
         <DatabaseProvider>
           <RootNavigator />
           <LayoutEditBanner />
+          <DownloadProgressBar />
+          <DownloadCompleteToast />
         </DatabaseProvider>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       </SafeAreaProvider>

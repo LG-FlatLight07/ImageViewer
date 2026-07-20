@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type SearchEngineKey = 'google' | 'bing' | 'yahoo' | 'duckduckgo';
 export type ThemePreference = 'system' | 'light' | 'dark';
+export type ImageViewerDirection = 'horizontal' | 'vertical';
 
 export const SEARCH_ENGINES: {
   key: SearchEngineKey;
@@ -42,11 +43,13 @@ type SettingsState = {
   themePreference: ThemePreference;
   folderNameExclusions: string[];
   disableHistory: boolean;
+  imageViewerDirection: ImageViewerDirection;
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
   addFolderNameExclusion: (text: string) => void;
   removeFolderNameExclusion: (text: string) => void;
   setDisableHistory: (disableHistory: boolean) => void;
+  setImageViewerDirection: (direction: ImageViewerDirection) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -56,6 +59,7 @@ export const useSettingsStore = create<SettingsState>()(
       themePreference: 'system',
       folderNameExclusions: [],
       disableHistory: false,
+      imageViewerDirection: 'horizontal',
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
       addFolderNameExclusion: (text) =>
@@ -71,6 +75,7 @@ export const useSettingsStore = create<SettingsState>()(
           folderNameExclusions: state.folderNameExclusions.filter((entry) => entry !== text),
         })),
       setDisableHistory: (disableHistory) => set({ disableHistory }),
+      setImageViewerDirection: (imageViewerDirection) => set({ imageViewerDirection }),
     }),
     {
       name: 'settings-store',

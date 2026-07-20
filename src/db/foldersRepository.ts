@@ -85,10 +85,17 @@ export async function createFolder(
 
 export async function listFolders(
   db: SQLiteDatabase,
-  options: { parentId: string | null; sortKey: FolderSortKey; searchQuery?: string },
+  options: {
+    parentId: string | null;
+    sortKey: FolderSortKey;
+    searchQuery?: string;
+    /** Only folders tagged with at least one of these (OR) are returned. */
+    tags?: string[];
+  },
 ): Promise<FolderWithTags[]> {
   const search = options.searchQuery?.trim() ?? '';
   const searchPattern = `%${search}%`;
+  const tags = options.tags?.filter((name) => name.trim().length > 0) ?? [];
 
   let orderByClause: string;
   let selectExtra = '';
@@ -106,6 +113,15 @@ export async function listFolders(
     orderByClause = 'ORDER BY f.name COLLATE NOCASE ASC';
   }
 
+  const tagPlaceholders = tags.map(() => '?').join(',');
+  const tagClause =
+    tags.length > 0
+      ? `AND EXISTS (
+           SELECT 1 FROM folder_tags ft3 JOIN tags t3 ON t3.id = ft3.tag_id
+           WHERE ft3.folder_id = f.id AND t3.name IN (${tagPlaceholders})
+         )`
+      : '';
+
   const rows = await db.getAllAsync<FolderRow>(
     `SELECT f.* ${selectExtra}
      FROM folders f ${joinExtra}
@@ -114,11 +130,13 @@ export async function listFolders(
          SELECT 1 FROM folder_tags ft2 JOIN tags t2 ON t2.id = ft2.tag_id
          WHERE ft2.folder_id = f.id AND t2.name LIKE ?
        ))
+       ${tagClause}
      ${orderByClause}`,
     options.parentId,
     search,
     searchPattern,
     searchPattern,
+    ...tags,
   );
 
   return attachTags(db, rows.map(mapFolderRow));

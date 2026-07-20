@@ -19,6 +19,19 @@ export async function listFolderImageUris(folder: Folder | null): Promise<string
   }
 }
 
+export async function deleteImageFiles(uris: string[]): Promise<void> {
+  for (const uri of uris) {
+    try {
+      const file = new File(uri);
+      if (file.exists) {
+        file.delete();
+      }
+    } catch {
+      // best-effort; skip files that can't be removed and continue with the rest
+    }
+  }
+}
+
 export async function deleteFolderFiles(folder: Folder | null): Promise<void> {
   if (!folder?.dirPath) {
     return;

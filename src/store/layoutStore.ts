@@ -3,16 +3,10 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { Anchor, Arrangement } from '../components/layout/anchors';
-import { DEFAULT_ANCHOR, DEFAULT_ARRANGEMENT } from '../components/layout/anchors';
 
 export type ScreenLayout = {
-  anchor: Anchor;
-  arrangement: Arrangement;
-};
-
-export const DEFAULT_LAYOUT: ScreenLayout = {
-  anchor: DEFAULT_ANCHOR,
-  arrangement: DEFAULT_ARRANGEMENT,
+  anchor?: Anchor;
+  arrangement?: Arrangement;
 };
 
 type LayoutState = {
@@ -32,17 +26,11 @@ export const useLayoutStore = create<LayoutState>()(
       setEditMode: (editMode) => set({ editMode }),
       setAnchor: (screenId, anchor) =>
         set((state) => ({
-          layouts: {
-            ...state.layouts,
-            [screenId]: { ...(state.layouts[screenId] ?? DEFAULT_LAYOUT), anchor },
-          },
+          layouts: { ...state.layouts, [screenId]: { ...state.layouts[screenId], anchor } },
         })),
       setArrangement: (screenId, arrangement) =>
         set((state) => ({
-          layouts: {
-            ...state.layouts,
-            [screenId]: { ...(state.layouts[screenId] ?? DEFAULT_LAYOUT), arrangement },
-          },
+          layouts: { ...state.layouts, [screenId]: { ...state.layouts[screenId], arrangement } },
         })),
       resetAll: () => set({ layouts: {} }),
     }),
@@ -50,10 +38,10 @@ export const useLayoutStore = create<LayoutState>()(
       name: 'layout-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ layouts: state.layouts }),
-      // Bumped because the previous version persisted a single Anchor per screen
-      // under the `anchors` key; that shape is incompatible with the current
-      // {anchor, arrangement} model, so old data is discarded rather than migrated.
-      version: 2,
+      // Bumped because the previous version's Anchor was a named 8-point
+      // literal; the new 32-point numeric perimeter index is incompatible,
+      // so old data is discarded rather than migrated.
+      version: 3,
       migrate: () => ({ layouts: {} }),
     },
   ),

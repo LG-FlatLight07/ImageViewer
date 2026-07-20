@@ -34,7 +34,7 @@ export function BrowserTabBar({
   const { colors } = useAppTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -47,7 +47,8 @@ export function BrowserTabBar({
               key={tab.id}
               style={[
                 styles.tab,
-                { backgroundColor: colors.surface },
+                styles.tabShadow,
+                { backgroundColor: colors.card },
                 active && { backgroundColor: colors.primary },
               ]}
               onPress={() => onSelectTab(tab.id)}
@@ -72,7 +73,7 @@ export function BrowserTabBar({
         })}
       </ScrollView>
       <TouchableOpacity
-        style={[styles.newTabButton, { backgroundColor: colors.surface }]}
+        style={[styles.newTabButton, styles.tabShadow, { backgroundColor: colors.card }]}
         onPress={onNewTab}
         accessibilityLabel="new-tab"
       >
@@ -87,7 +88,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
-    paddingBottom: 6,
+    marginTop: 6,
+  },
+  tabShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
   scrollContent: {
     alignItems: 'center',

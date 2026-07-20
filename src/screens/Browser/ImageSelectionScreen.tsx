@@ -1,13 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -18,6 +10,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { DetectedImage } from '../../services/imageGrouping';
 import { downloadImagesToNewFolder } from '../../services/downloadService';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useDownloadStore } from '../../store/downloadStore';
 import { useAppTheme } from '../../theme/theme';
 
 const THUMB_SIZE = 100;
@@ -38,8 +31,6 @@ export function ImageSelectionScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(primaryGroup?.images.map((image) => image.id) ?? []),
   );
-  const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState({ completed: 0, total: 0 });
 
   const toggleImage = (id: string) => {
     setSelectedIds((prev) => {
@@ -56,25 +47,27 @@ export function ImageSelectionScreen() {
   const selectAll = () => setSelectedIds(new Set(allImages.map((image) => image.id)));
   const clearAll = () => setSelectedIds(new Set());
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     const targets = allImages.filter((image) => selectedIds.has(image.id));
     if (targets.length === 0) {
       return;
     }
-    setDownloading(true);
-    setProgress({ completed: 0, total: targets.length });
-    try {
-      await downloadImagesToNewFolder(db, {
-        folderName: pageTitle,
-        sourceUrl,
-        imageUrls: targets.map((image) => image.src),
-        folderNameExclusions,
-        onProgress: (completed, total) => setProgress({ completed, total }),
+    useDownloadStore.getState().start(targets.length);
+    navigation.goBack();
+    downloadImagesToNewFolder(db, {
+      folderName: pageTitle,
+      sourceUrl,
+      imageUrls: targets.map((image) => image.src),
+      folderNameExclusions,
+      onProgress: (completed, total) =>
+        useDownloadStore.getState().updateProgress(completed, total),
+    })
+      .then((result) => {
+        useDownloadStore.getState().finish(`ダウンロード完了: ${result.successCount}枚`);
+      })
+      .catch(() => {
+        useDownloadStore.getState().finish('ダウンロードに失敗しました');
       });
-      navigation.navigate('MainTabs', { screen: 'Gallery' } as never);
-    } finally {
-      setDownloading(false);
-    }
   };
 
   const renderThumbnail = (image: DetectedImage) => {
@@ -162,18 +155,9 @@ export function ImageSelectionScreen() {
             selectedIds.size === 0 && styles.downloadButtonDisabled,
           ]}
           onPress={handleDownload}
-          disabled={selectedIds.size === 0 || downloading}
+          disabled={selectedIds.size === 0}
         >
-          {downloading ? (
-            <View style={styles.downloadingRow}>
-              <ActivityIndicator color="#fff" />
-              <Text style={styles.downloadButtonText}>
-                {progress.completed} / {progress.total} 保存中...
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.downloadButtonText}>選択した画像をダウンロード</Text>
-          )}
+          <Text style={styles.downloadButtonText}>選択した画像をダウンロード</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -286,9 +270,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     marginLeft: 8,
-  },
-  downloadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
 });

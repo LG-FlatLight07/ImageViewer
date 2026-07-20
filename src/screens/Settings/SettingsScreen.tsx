@@ -13,13 +13,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useLayoutStore } from '../../store/layoutStore';
-import { SEARCH_ENGINES, useSettingsStore, type ThemePreference } from '../../store/settingsStore';
+import {
+  SEARCH_ENGINES,
+  useSettingsStore,
+  type ImageViewerDirection,
+  type ThemePreference,
+} from '../../store/settingsStore';
 import { useAppTheme } from '../../theme/theme';
 
 const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
   { key: 'system', label: 'システムに従う' },
   { key: 'light', label: 'ライト' },
   { key: 'dark', label: 'ダーク' },
+];
+
+const VIEWER_DIRECTION_OPTIONS: { key: ImageViewerDirection; label: string }[] = [
+  { key: 'horizontal', label: '横スライド' },
+  { key: 'vertical', label: '縦スライド' },
 ];
 
 export function SettingsScreen() {
@@ -33,6 +43,8 @@ export function SettingsScreen() {
   const setThemePreference = useSettingsStore((state) => state.setThemePreference);
   const disableHistory = useSettingsStore((state) => state.disableHistory);
   const setDisableHistory = useSettingsStore((state) => state.setDisableHistory);
+  const imageViewerDirection = useSettingsStore((state) => state.imageViewerDirection);
+  const setImageViewerDirection = useSettingsStore((state) => state.setImageViewerDirection);
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
   const addFolderNameExclusion = useSettingsStore((state) => state.addFolderNameExclusion);
   const removeFolderNameExclusion = useSettingsStore((state) => state.removeFolderNameExclusion);
@@ -162,6 +174,33 @@ export function SettingsScreen() {
           >
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          スライドビューワー
+        </Text>
+        <View style={styles.optionRow}>
+          {VIEWER_DIRECTION_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.optionButton,
+                { backgroundColor: colors.surface },
+                imageViewerDirection === option.key && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setImageViewerDirection(option.key)}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  { color: colors.secondaryText },
+                  imageViewerDirection === option.key && styles.optionButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>

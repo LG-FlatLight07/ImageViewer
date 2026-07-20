@@ -18,7 +18,7 @@ import {
   renameFolder,
   setFolderTags,
 } from '../../db/foldersRepository';
-import { deleteFolderFiles, listFolderImageUris } from '../../db/folderImages';
+import { deleteFolderFiles, deleteImageFiles, listFolderImageUris } from '../../db/folderImages';
 import { FolderRow } from '../../components/FolderRow';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
@@ -47,6 +47,8 @@ export function FolderDetailScreen() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [taggingTarget, setTaggingTarget] = useState<FolderWithTags | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<FolderWithTags | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
     const current = await getFolder(db, folderId);
@@ -91,6 +93,47 @@ export function FolderDetailScreen() {
     rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
   };
 
+  const toggleSelectionMode = () => {
+    setSelectionMode((prev) => !prev);
+    setSelectedUris(new Set());
+  };
+
+  const toggleImageSelected = (uri: string) => {
+    setSelectedUris((prev) => {
+      const next = new Set(prev);
+      if (next.has(uri)) {
+        next.delete(uri);
+      } else {
+        next.add(uri);
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteSelectedImages = () => {
+    const targets = Array.from(selectedUris);
+    if (targets.length === 0) {
+      return;
+    }
+    Alert.alert(
+      '選択した画像を削除しますか?',
+      `${targets.length}枚の画像を削除します。この操作は元に戻せません。`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteImageFiles(targets);
+            setSelectionMode(false);
+            setSelectedUris(new Set());
+            reload();
+          },
+        },
+      ],
+    );
+  };
+
   useLayoutEffect(() => {
     navigation.setOptions({ title: folder?.name ?? '' });
   }, [navigation, folder?.name]);
@@ -123,6 +166,18 @@ export function FolderDetailScreen() {
           <Ionicons name="add" size={16} color="#4c8bf5" />
           <Text style={styles.toolbarButtonText}>新規フォルダ</Text>
         </TouchableOpacity>
+        {imageUris.length > 0 && (
+          <TouchableOpacity style={styles.toolbarButton} onPress={toggleSelectionMode}>
+            <Ionicons
+              name={selectionMode ? 'checkmark-done-outline' : 'checkbox-outline'}
+              size={16}
+              color="#4c8bf5"
+            />
+            <Text style={styles.toolbarButtonText}>
+              {selectionMode ? '選択を終了' : '画像を選択'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {folder?.tags && folder.tags.length > 0 && (
@@ -158,24 +213,60 @@ export function FolderDetailScreen() {
               </View>
             );
           }
+          const selected = selectedUris.has(item.uri);
           return (
             <TouchableOpacity
               style={[styles.imageCell, { backgroundColor: colors.surface }]}
               onPress={() =>
-                navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
+                selectionMode
+                  ? toggleImageSelected(item.uri)
+                  : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
               }
             >
               <Image source={{ uri: item.uri }} style={styles.imageThumb} resizeMode="cover" />
+              {selectionMode && (
+                <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>
+                  <Ionicons
+                    name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={20}
+                    color={selected ? '#4c8bf5' : '#fff'}
+                  />
+                </View>
+              )}
             </TouchableOpacity>
           );
         }}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, selectionMode && styles.listContentWithFooter]}
         ListEmptyComponent={
           <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
             このフォルダは空です
           </Text>
         }
       />
+
+      {selectionMode && (
+        <View
+          style={[
+            styles.selectionFooter,
+            { backgroundColor: colors.card, borderTopColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.selectionCount, { color: colors.text }]}>
+            {selectedUris.size}枚選択中
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.selectionDeleteButton,
+              { backgroundColor: colors.danger },
+              selectedUris.size === 0 && styles.selectionDeleteButtonDisabled,
+            ]}
+            onPress={handleDeleteSelectedImages}
+            disabled={selectedUris.size === 0}
+          >
+            <Text style={styles.selectionDeleteButtonText}>削除</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ActionMenuModal
         visible={menuFolder !== null}
@@ -295,6 +386,9 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 24,
   },
+  listContentWithFooter: {
+    paddingBottom: 80,
+  },
   fullWidthRow: {
     width: '100%',
   },
@@ -308,9 +402,47 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  selectBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 10,
+  },
+  selectBadgeSelected: {
+    backgroundColor: '#fff',
+  },
   emptyText: {
     textAlign: 'center',
     color: '#888',
     marginTop: 60,
+  },
+  selectionFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  selectionCount: {
+    fontSize: 14,
+  },
+  selectionDeleteButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  selectionDeleteButtonDisabled: {
+    opacity: 0.4,
+  },
+  selectionDeleteButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

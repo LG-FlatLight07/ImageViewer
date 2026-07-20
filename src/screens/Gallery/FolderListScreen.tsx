@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,7 @@ import { useAppTheme } from '../../theme/theme';
 
 const SEARCH_SCREEN_ID = 'gallery.folderList.search';
 const SORT_SCREEN_ID = 'gallery.folderList.sort';
-const NEW_FOLDER_SCREEN_ID = 'gallery.folderList.newFolder';
+const MIN_LIST_PADDING_TOP = 64;
 
 const SORT_OPTIONS: { key: FolderSortKey; label: string }[] = [
   { key: 'name', label: '名前順' },
@@ -46,32 +46,46 @@ export function FolderListScreen() {
   const { colors } = useAppTheme();
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [folders, setFolders] = useState<FolderWithTags[]>([]);
   const [allTagNames, setAllTagNames] = useState<string[]>([]);
+  const [listPaddingTop, setListPaddingTop] = useState(MIN_LIST_PADDING_TOP);
   const [menuFolder, setMenuFolder] = useState<FolderWithTags | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [taggingFolder, setTaggingFolder] = useState<FolderWithTags | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<FolderWithTags | null>(null);
 
   const reload = useCallback(async () => {
-    const result = await listFolders(db, { parentId: null, sortKey, searchQuery });
+    const result = await listFolders(db, {
+      parentId: null,
+      sortKey,
+      searchQuery,
+      tags: selectedTags,
+    });
     setFolders(result);
-  }, [db, sortKey, searchQuery]);
+  }, [db, sortKey, searchQuery, selectedTags]);
 
   useFocusEffect(
     useCallback(() => {
       reload();
-    }, [reload]),
+      listAllTagNames(db).then(setAllTagNames);
+    }, [db, reload]),
   );
 
-  useEffect(() => {
-    listAllTagNames(db).then(setAllTagNames);
-  }, [db]);
-
   const tagSuggestions = allTagNames
+    .filter((name) => !selectedTags.includes(name))
     .filter((name) => name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     .slice(0, 20);
+
+  const addTagFilter = (name: string) => {
+    setSelectedTags((prev) => (prev.includes(name) ? prev : [...prev, name]));
+  };
+
+  const removeTagFilter = (name: string) => {
+    setSelectedTags((prev) => prev.filter((tag) => tag !== name));
+  };
 
   const handleDelete = (folder: FolderWithTags) => {
     Alert.alert(
@@ -100,6 +114,8 @@ export function FolderListScreen() {
     rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
   };
 
+  const currentSortLabel = SORT_OPTIONS.find((option) => option.key === sortKey)?.label ?? '';
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -108,7 +124,7 @@ export function FolderListScreen() {
       <DraggableLayoutArea>
         <FlatList
           style={styles.list}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingTop: listPaddingTop }]}
           data={folders}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
@@ -127,7 +143,14 @@ export function FolderListScreen() {
           }
         />
 
-        <ControlGroup screenId={SEARCH_SCREEN_ID} variant="bar" defaultAnchor="top">
+        <ControlGroup
+          screenId={SEARCH_SCREEN_ID}
+          variant="bar"
+          defaultAnchor="top"
+          onMeasured={(size) =>
+            setListPaddingTop(size.height > 0 ? size.height + 20 : MIN_LIST_PADDING_TOP)
+          }
+        >
           <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
             <Ionicons name="search" size={16} color={colors.secondaryText} />
             <TextInput
@@ -137,14 +160,39 @@ export function FolderListScreen() {
               placeholder="フォルダ名・タグ名で検索"
               placeholderTextColor={colors.secondaryText}
             />
+            <TouchableOpacity
+              style={[styles.newFolderIconButton, { backgroundColor: colors.primary }]}
+              onPress={() => setCreatingFolder(true)}
+              accessibilityLabel="create-folder"
+              hitSlop={4}
+            >
+              <Ionicons name="add" size={16} color="#fff" />
+            </TouchableOpacity>
           </View>
+
+          {selectedTags.length > 0 && (
+            <View style={styles.selectedTagRow}>
+              {selectedTags.map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  style={[styles.selectedTagChip, { backgroundColor: colors.primary }]}
+                  onPress={() => removeTagFilter(name)}
+                  accessibilityLabel={`remove-tag-filter-${name}`}
+                >
+                  <Text style={styles.selectedTagText}>{name}</Text>
+                  <Ionicons name="close" size={12} color="#fff" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           {tagSuggestions.length > 0 && (
             <View style={[styles.tagSuggestionRow, { backgroundColor: colors.surface }]}>
               {tagSuggestions.map((name) => (
                 <TouchableOpacity
                   key={name}
                   style={[styles.tagSuggestionChip, { backgroundColor: colors.background }]}
-                  onPress={() => setSearchQuery(name)}
+                  onPress={() => addTagFilter(name)}
                 >
                   <Ionicons name="pricetag-outline" size={12} color={colors.secondaryText} />
                   <Text style={[styles.tagSuggestionText, { color: colors.text }]}>{name}</Text>
@@ -155,41 +203,25 @@ export function FolderListScreen() {
         </ControlGroup>
 
         <ControlGroup screenId={SORT_SCREEN_ID} defaultAnchor="bottomLeft">
-          {SORT_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.key}
-              style={[
-                styles.sortButton,
-                { backgroundColor: colors.surface },
-                sortKey === option.key && { backgroundColor: colors.primary },
-              ]}
-              onPress={() => setSortKey(option.key)}
-              accessibilityLabel={`sort-${option.key}`}
-            >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  { color: colors.secondaryText },
-                  sortKey === option.key && styles.sortButtonTextActive,
-                ]}
-              >
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ControlGroup>
-
-        <ControlGroup screenId={NEW_FOLDER_SCREEN_ID} defaultAnchor="bottomRight">
           <TouchableOpacity
-            style={[styles.newFolderButton, { backgroundColor: colors.primary }]}
-            onPress={() => setCreatingFolder(true)}
-            accessibilityLabel="create-folder"
+            style={[styles.sortButton, { backgroundColor: colors.surface }]}
+            onPress={() => setSortMenuVisible(true)}
+            accessibilityLabel="open-sort-menu"
           >
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.newFolderButtonText}>新規フォルダ</Text>
+            <Ionicons name="swap-vertical" size={14} color={colors.text} />
+            <Text style={[styles.sortButtonText, { color: colors.text }]}>{currentSortLabel}</Text>
           </TouchableOpacity>
         </ControlGroup>
       </DraggableLayoutArea>
+
+      <ActionMenuModal
+        visible={sortMenuVisible}
+        onClose={() => setSortMenuVisible(false)}
+        actions={SORT_OPTIONS.map((option) => ({
+          label: option.key === sortKey ? `✓ ${option.label}` : option.label,
+          onPress: () => setSortKey(option.key),
+        }))}
+      />
 
       <ActionMenuModal
         visible={menuFolder !== null}
@@ -278,6 +310,33 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 14,
   },
+  newFolderIconButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  selectedTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  selectedTagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  selectedTagText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
+  },
   tagSuggestionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -298,6 +357,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
@@ -305,32 +367,11 @@ const styles = StyleSheet.create({
   },
   sortButtonText: {
     fontSize: 12,
-    color: '#555',
-  },
-  sortButtonTextActive: {
-    color: '#fff',
-  },
-  newFolderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: '#4c8bf5',
-  },
-  newFolderButtonText: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '600',
   },
   list: {
     flex: 1,
   },
   listContent: {
-    // Clears the default top-anchored, floating search bar (it's draggable
-    // now, so it no longer reserves layout space of its own).
-    paddingTop: 64,
     paddingBottom: 24,
   },
   emptyText: {

@@ -25,7 +25,7 @@ export function LayoutEditBanner() {
     <View style={[styles.overlay, { top: insets.top + 8 }]} pointerEvents="box-none">
       <View style={styles.banner}>
         <Text style={styles.text}>
-          レイアウト編集中: ドラッグで位置を移動、右上の切替ボタンで並び方を変更できます
+          レイアウト編集中: ドラッグで端にドッキング、右上の切替ボタンで並び方を変更できます
         </Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.button} onPress={confirmReset}>

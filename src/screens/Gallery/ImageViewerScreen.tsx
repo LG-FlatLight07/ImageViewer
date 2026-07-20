@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,92 +9,53 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
 import type { GalleryStackParamList } from '../../navigation/types';
-import { getFolder } from '../../db/foldersRepository';
+import { getFolder, listFolders } from '../../db/foldersRepository';
 import { listFolderImageUris } from '../../db/folderImages';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const GAP = 6;
+const DISMISS_DISTANCE = 100;
+const DISMISS_VELOCITY = 800;
 
-function ZoomableImage({ uri }: { uri: string }) {
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-  const [panEnabled, setPanEnabled] = useState(false);
-
-  const pinch = Gesture.Pinch()
-    .onUpdate((event) => {
-      scale.value = savedScale.value * event.scale;
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-      runOnJS(setPanEnabled)(scale.value > 1.05);
-    });
-
-  const pan = Gesture.Pan()
-    .enabled(panEnabled)
-    .onUpdate((event) => {
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
-    })
-    .onEnd(() => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
-
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      const nextScale = scale.value > 1 ? 1 : 2;
-      scale.value = withTiming(nextScale);
-      savedScale.value = nextScale;
-      translateX.value = withTiming(0);
-      translateY.value = withTiming(0);
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
-      runOnJS(setPanEnabled)(nextScale > 1);
-    });
-
-  const composedGesture = Gesture.Race(doubleTap, Gesture.Simultaneous(pinch, pan));
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
-
-  return (
-    <GestureDetector gesture={composedGesture}>
-      <Animated.View style={styles.page}>
-        <Animated.Image
-          source={{ uri }}
-          style={[styles.image, animatedStyle]}
-          resizeMode="contain"
-        />
-      </Animated.View>
-    </GestureDetector>
-  );
-}
+type PageItem = { uri: string; folderId: string };
 
 export function ImageViewerScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
   const route = useRoute<RouteProp<GalleryStackParamList, 'ImageViewer'>>();
   const { folderId, startIndex } = route.params;
+  const direction = useSettingsStore((state) => state.imageViewerDirection);
 
-  const [images, setImages] = useState<string[]>([]);
+  const [pages, setPages] = useState<PageItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(startIndex);
 
   const load = useCallback(async () => {
     const folder = await getFolder(db, folderId);
-    setImages(await listFolderImageUris(folder));
+    const currentImages = await listFolderImageUris(folder);
+    const currentPages = currentImages.map((uri) => ({ uri, folderId }));
+
+    if (!folder) {
+      setPages(currentPages);
+      return;
+    }
+
+    const siblings = await listFolders(db, { parentId: folder.parentId, sortKey: 'name' });
+    const ownIndex = siblings.findIndex((sibling) => sibling.id === folderId);
+    const nextFolder = ownIndex >= 0 ? siblings[ownIndex + 1] : undefined;
+
+    if (!nextFolder) {
+      setPages(currentPages);
+      return;
+    }
+
+    const nextImages = await listFolderImageUris(nextFolder);
+    setPages([...currentPages, ...nextImages.map((uri) => ({ uri, folderId: nextFolder.id }))]);
   }, [db, folderId]);
 
   useEffect(() => {
@@ -103,35 +64,101 @@ export function ImageViewerScreen() {
     load();
   }, [load]);
 
+  const isHorizontal = direction === 'horizontal';
+  const pageSize = isHorizontal ? SCREEN_WIDTH : SCREEN_HEIGHT;
+
+  const translateMain = useSharedValue(-startIndex * pageSize);
+  const translateCross = useSharedValue(0);
+  const startMain = useSharedValue(-startIndex * pageSize);
+
+  const closeViewer = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
+
+  const settleToIndex = useCallback((index: number) => {
+    setCurrentIndex(index);
+  }, []);
+
+  const pan = Gesture.Pan()
+    .onStart(() => {
+      startMain.value = translateMain.value;
+    })
+    .onUpdate((event) => {
+      const mainDelta = isHorizontal ? event.translationX : event.translationY;
+      const crossDelta = isHorizontal ? event.translationY : event.translationX;
+      translateMain.value = startMain.value + mainDelta;
+      translateCross.value = crossDelta;
+    })
+    .onEnd((event) => {
+      const crossVelocity = isHorizontal ? event.velocityY : event.velocityX;
+      if (
+        Math.abs(translateCross.value) > DISMISS_DISTANCE ||
+        Math.abs(crossVelocity) > DISMISS_VELOCITY
+      ) {
+        const sign = translateCross.value >= 0 ? 1 : -1;
+        translateCross.value = withTiming(sign * pageSize, { duration: 200 }, (finished) => {
+          if (finished) {
+            runOnJS(closeViewer)();
+          }
+        });
+        return;
+      }
+      translateCross.value = withSpring(0, { damping: 20 });
+
+      const rawIndex = Math.round(-translateMain.value / pageSize);
+      const clampedIndex = Math.max(0, Math.min(pages.length - 1, rawIndex));
+      translateMain.value = withTiming(-clampedIndex * pageSize, { duration: 250 });
+      runOnJS(settleToIndex)(clampedIndex);
+    });
+
+  const trackAnimatedStyle = useAnimatedStyle(() => ({
+    transform: isHorizontal
+      ? [{ translateX: translateMain.value }, { translateY: translateCross.value }]
+      : [{ translateX: translateCross.value }, { translateY: translateMain.value }],
+  }));
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={images}
-        horizontal
-        pagingEnabled
-        initialScrollIndex={startIndex}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
-          index,
-        })}
-        keyExtractor={(uri) => uri}
-        onMomentumScrollEnd={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-          setCurrentIndex(index);
-        }}
-        renderItem={({ item }) => <ZoomableImage uri={item} />}
-      />
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="close"
-          hitSlop={8}
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={[
+            isHorizontal
+              ? { width: pageSize * Math.max(pages.length, 1), height: SCREEN_HEIGHT }
+              : { width: SCREEN_WIDTH, height: pageSize * Math.max(pages.length, 1) },
+            styles.track,
+            trackAnimatedStyle,
+          ]}
         >
+          {pages.map((page, index) => (
+            <View
+              key={`${page.folderId}-${page.uri}`}
+              style={[
+                styles.page,
+                isHorizontal
+                  ? { left: index * pageSize, top: 0 }
+                  : { top: index * pageSize, left: 0 },
+              ]}
+            >
+              <Image
+                source={{ uri: page.uri }}
+                style={
+                  isHorizontal
+                    ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
+                    : { width: SCREEN_WIDTH, height: pageSize - GAP }
+                }
+                resizeMode="contain"
+              />
+            </View>
+          ))}
+        </Animated.View>
+      </GestureDetector>
+
+      <View style={styles.header}>
+        <TouchableOpacity onPress={closeViewer} accessibilityLabel="close" hitSlop={8}>
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.counter}>
-          {images.length > 0 ? currentIndex + 1 : 0} / {images.length}
+          {pages.length > 0 ? currentIndex + 1 : 0} / {pages.length}
         </Text>
       </View>
     </View>
@@ -142,16 +169,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+  track: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   page: {
+    position: 'absolute',
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  image: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    backgroundColor: '#000',
   },
   header: {
     position: 'absolute',
