@@ -47,6 +47,14 @@ npx expo start --dev-client
 - Android: `npm run android`
 - iOS: `npm run ios` (macOS + Xcodeが必要)
 
+### Webプレビュー(簡易確認用)
+
+`npm run web` でブラウザ上に簡易プレビューを表示できます。ただし
+`react-native-webview` はWeb実装を持たないため、**ブラウザータブ(WebView本体)は
+Web上では動作しません**。ギャラリー・設定・履歴・ブックマークなど他画面の確認や
+UI/レイアウトの動作確認用途で使ってください。実際のWebView込みの動作確認は
+Dev Client(`npx expo start --dev-client`)+実機/エミュレータで行ってください。
+
 ## Lint / Format / Test
 
 ```bash
