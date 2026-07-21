@@ -45,6 +45,7 @@ type SettingsState = {
   disableHistory: boolean;
   imageViewerDirection: ImageViewerDirection;
   adBlockEnabled: boolean;
+  autoSelectSequentialImages: boolean;
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
   addFolderNameExclusion: (text: string) => void;
@@ -52,6 +53,7 @@ type SettingsState = {
   setDisableHistory: (disableHistory: boolean) => void;
   setImageViewerDirection: (direction: ImageViewerDirection) => void;
   setAdBlockEnabled: (enabled: boolean) => void;
+  setAutoSelectSequentialImages: (enabled: boolean) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -63,6 +65,7 @@ export const useSettingsStore = create<SettingsState>()(
       disableHistory: false,
       imageViewerDirection: 'horizontal',
       adBlockEnabled: true,
+      autoSelectSequentialImages: true,
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
       addFolderNameExclusion: (text) =>
@@ -80,6 +83,8 @@ export const useSettingsStore = create<SettingsState>()(
       setDisableHistory: (disableHistory) => set({ disableHistory }),
       setImageViewerDirection: (imageViewerDirection) => set({ imageViewerDirection }),
       setAdBlockEnabled: (adBlockEnabled) => set({ adBlockEnabled }),
+      setAutoSelectSequentialImages: (autoSelectSequentialImages) =>
+        set({ autoSelectSequentialImages }),
     }),
     {
       name: 'settings-store',

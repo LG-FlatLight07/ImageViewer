@@ -21,6 +21,7 @@ export function ImageSelectionScreen() {
   const db = useSQLiteContext();
   const { colors } = useAppTheme();
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
+  const autoSelectSequentialImages = useSettingsStore((state) => state.autoSelectSequentialImages);
   const { pageTitle, sourceUrl, primaryGroup, otherImages } = route.params;
 
   const allImages = useMemo<DetectedImage[]>(
@@ -29,7 +30,10 @@ export function ImageSelectionScreen() {
   );
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(primaryGroup?.images.map((image) => image.id) ?? []),
+    () =>
+      new Set(
+        autoSelectSequentialImages ? (primaryGroup?.images.map((image) => image.id) ?? []) : [],
+      ),
   );
 
   const toggleImage = (id: string) => {

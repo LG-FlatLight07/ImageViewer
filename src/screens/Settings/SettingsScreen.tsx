@@ -54,6 +54,10 @@ export function SettingsScreen() {
   const setDisableHistory = useSettingsStore((state) => state.setDisableHistory);
   const adBlockEnabled = useSettingsStore((state) => state.adBlockEnabled);
   const setAdBlockEnabled = useSettingsStore((state) => state.setAdBlockEnabled);
+  const autoSelectSequentialImages = useSettingsStore((state) => state.autoSelectSequentialImages);
+  const setAutoSelectSequentialImages = useSettingsStore(
+    (state) => state.setAutoSelectSequentialImages,
+  );
   const imageViewerDirection = useSettingsStore((state) => state.imageViewerDirection);
   const setImageViewerDirection = useSettingsStore((state) => state.setImageViewerDirection);
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
@@ -169,6 +173,23 @@ export function SettingsScreen() {
             value={adBlockEnabled}
             onValueChange={setAdBlockEnabled}
             accessibilityLabel="toggle-ad-block"
+          />
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          画像のダウンロード
+        </Text>
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View style={styles.rowTextGroup}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>連番画像を自動選択</Text>
+            <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
+              保存ボタンを押したときに、検出された連番画像を自動的に選択した状態にします
+            </Text>
+          </View>
+          <Switch
+            value={autoSelectSequentialImages}
+            onValueChange={setAutoSelectSequentialImages}
+            accessibilityLabel="toggle-auto-select-sequential-images"
           />
         </View>
 
