@@ -10,6 +10,7 @@ import { ImageSelectionScreen } from '../screens/Browser/ImageSelectionScreen';
 import { GalleryNavigator } from './GalleryNavigator';
 import { FolderPickerScreen } from '../screens/Gallery/FolderPickerScreen';
 import { SettingsScreen } from '../screens/Settings/SettingsScreen';
+import { AppGuideScreen } from '../screens/Settings/AppGuideScreen';
 import { useAppTheme } from '../theme/theme';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -68,6 +69,11 @@ export function RootNavigator() {
           name="FolderPicker"
           component={FolderPickerScreen}
           options={{ headerShown: false, presentation: 'modal' }}
+        />
+        <RootStack.Screen
+          name="AppGuide"
+          component={AppGuideScreen}
+          options={{ title: 'アプリの使い方・仕様' }}
         />
       </RootStack.Navigator>
     </NavigationContainer>

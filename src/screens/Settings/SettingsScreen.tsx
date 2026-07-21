@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useRootNavigation } from '../../navigation/useRootNavigation';
 import { useLayoutStore } from '../../store/layoutStore';
 import {
   SEARCH_ENGINES,
@@ -34,6 +35,7 @@ const VIEWER_DIRECTION_OPTIONS: { key: ImageViewerDirection; label: string }[] =
 
 export function SettingsScreen() {
   const { colors } = useAppTheme();
+  const rootNavigation = useRootNavigation();
   const editMode = useLayoutStore((state) => state.editMode);
   const setEditMode = useLayoutStore((state) => state.setEditMode);
   const resetAll = useLayoutStore((state) => state.resetAll);
@@ -234,6 +236,19 @@ export function SettingsScreen() {
             <Text style={styles.resetButtonText}>リセット</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.guideDivider} />
+        <TouchableOpacity
+          style={[styles.guideLink, { backgroundColor: colors.surface }]}
+          onPress={() => rootNavigation.navigate('AppGuide')}
+          accessibilityLabel="open-app-guide"
+        >
+          <Ionicons name="information-circle-outline" size={18} color={colors.text} />
+          <Text style={[styles.guideLinkText, { color: colors.text }]}>
+            アプリの使い方・仕様を見る
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -333,5 +348,21 @@ const styles = StyleSheet.create({
     color: '#c0392b',
     fontWeight: '600',
     fontSize: 13,
+  },
+  guideDivider: {
+    height: 24,
+  },
+  guideLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  guideLinkText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

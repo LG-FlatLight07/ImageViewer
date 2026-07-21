@@ -9,6 +9,7 @@ export type RootStackParamList = {
     otherImages: DetectedImage[];
   };
   FolderPicker: { movingFolderId: string };
+  AppGuide: undefined;
 };
 
 export type MainTabParamList = {

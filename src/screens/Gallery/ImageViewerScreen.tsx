@@ -7,8 +7,10 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withDecay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -19,7 +21,7 @@ import { listFolderImageUris } from '../../db/folderImages';
 import { useSettingsStore } from '../../store/settingsStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const GAP = 6;
+const GAP = 2;
 const DISMISS_DISTANCE = 100;
 const DISMISS_VELOCITY = 800;
 
@@ -75,9 +77,20 @@ export function ImageViewerScreen() {
     navigation.goBack();
   }, [navigation]);
 
-  const settleToIndex = useCallback((index: number) => {
+  const setIndex = useCallback((index: number) => {
     setCurrentIndex(index);
   }, []);
+
+  useAnimatedReaction(
+    () => Math.round(-translateMain.value / pageSize),
+    (value, previous) => {
+      if (value !== previous && pages.length > 0) {
+        const clamped = Math.max(0, Math.min(pages.length - 1, value));
+        runOnJS(setIndex)(clamped);
+      }
+    },
+    [pages.length, pageSize],
+  );
 
   const pan = Gesture.Pan()
     .onStart(() => {
@@ -105,10 +118,13 @@ export function ImageViewerScreen() {
       }
       translateCross.value = withSpring(0, { damping: 20 });
 
-      const rawIndex = Math.round(-translateMain.value / pageSize);
-      const clampedIndex = Math.max(0, Math.min(pages.length - 1, rawIndex));
-      translateMain.value = withTiming(-clampedIndex * pageSize, { duration: 250 });
-      runOnJS(settleToIndex)(clampedIndex);
+      // Free-scroll: let the fling decay naturally instead of snapping to a page.
+      const mainVelocity = isHorizontal ? event.velocityX : event.velocityY;
+      const minTranslate = -(Math.max(pages.length - 1, 0) * pageSize);
+      translateMain.value = withDecay({
+        velocity: mainVelocity,
+        clamp: [minTranslate, 0],
+      });
     });
 
   const trackAnimatedStyle = useAnimatedStyle(() => ({
