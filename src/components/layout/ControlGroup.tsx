@@ -182,12 +182,14 @@ export function ControlGroup({
         </Animated.View>
       </GestureDetector>
       {editMode && dragging && bounds.width > 0 && effectiveSize.width > 0 && (
-        <AnchorTargets
-          bounds={bounds}
-          size={effectiveSize}
-          current={anchor}
-          activeColor={colors.primary}
-        />
+        <View style={styles.anchorTargetsLayer} pointerEvents="none">
+          <AnchorTargets
+            bounds={bounds}
+            size={effectiveSize}
+            current={anchor}
+            activeColor={colors.primary}
+          />
+        </View>
       )}
     </>
   );
@@ -229,6 +231,19 @@ function AnchorTargets({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    // Must stay above DraggableLayoutArea's dim overlay (zIndex 500) so the
+    // group remains visible and draggable while the background is dimmed.
+    zIndex: 600,
+    elevation: 600,
+  },
+  anchorTargetsLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 600,
+    elevation: 600,
   },
   group: {
     borderRadius: 16,

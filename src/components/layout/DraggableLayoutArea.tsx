@@ -78,5 +78,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.45)',
+    // Must sit above plain screen content (WebView/FlatList) but below every
+    // ControlGroup (see ControlGroup's container zIndex) — otherwise, since
+    // this view is appended after `children` in the tree, it would paint on
+    // top of the ControlGroups too and swallow their drag gesture.
+    zIndex: 500,
+    elevation: 500,
   },
 });
