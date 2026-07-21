@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,13 +23,28 @@ import { FolderRow } from '../../components/FolderRow';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
+import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
+import { ControlGroup } from '../../components/layout/ControlGroup';
+import { clampToEdgeAnchor, EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore } from '../../store/browserStore';
+import { useLayoutStore } from '../../store/layoutStore';
 import { useAppTheme } from '../../theme/theme';
 
 const IMAGE_COLUMNS = 3;
+// Ordered so the header wins the default top-slot tie-break (see ControlGroup's
+// stackPeerId doc) before either has ever been dragged by the user.
+const HEADER_SCREEN_ID = 'gallery.folderDetail.1-header';
+const ACTIONS_SCREEN_ID = 'gallery.folderDetail.2-actions';
+const RESERVED_GAP = 16;
 
 type ListItem =
   { type: 'subfolder'; folder: FolderWithTags } | { type: 'image'; uri: string; index: number };
+
+function edgeOf(anchor: number | undefined): 'top' | 'bottom' {
+  return anchor !== undefined && clampToEdgeAnchor(anchor) === EDGE_BOTTOM_ANCHOR
+    ? 'bottom'
+    : 'top';
+}
 
 export function FolderDetailScreen() {
   const db = useSQLiteContext();
@@ -39,6 +54,8 @@ export function FolderDetailScreen() {
   const { folderId } = route.params;
   const { colors } = useAppTheme();
   const setBrowserUrl = useBrowserStore((state) => state.setUrl);
+  const headerAnchor = useLayoutStore((state) => state.layouts[HEADER_SCREEN_ID]?.anchor);
+  const actionsAnchor = useLayoutStore((state) => state.layouts[ACTIONS_SCREEN_ID]?.anchor);
 
   const [folder, setFolder] = useState<FolderWithTags | null>(null);
   const [subfolders, setSubfolders] = useState<FolderWithTags[]>([]);
@@ -49,6 +66,8 @@ export function FolderDetailScreen() {
   const [renamingFolder, setRenamingFolder] = useState<FolderWithTags | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [actionsHeight, setActionsHeight] = useState(0);
 
   const reload = useCallback(async () => {
     const current = await getFolder(db, folderId);
@@ -134,115 +153,159 @@ export function FolderDetailScreen() {
     );
   };
 
-  useLayoutEffect(() => {
-    navigation.setOptions({ title: folder?.name ?? '' });
-  }, [navigation, folder?.name]);
-
   const items: ListItem[] = [
     ...subfolders.map((f) => ({ type: 'subfolder' as const, folder: f })),
     ...imageUris.map((uri, index) => ({ type: 'image' as const, uri, index })),
   ];
 
+  const headerEdge = edgeOf(headerAnchor);
+  const actionsEdge = edgeOf(actionsAnchor);
+  const topReserved =
+    (headerEdge === 'top' ? headerHeight + RESERVED_GAP : 0) +
+    (actionsEdge === 'top' ? actionsHeight + RESERVED_GAP : 0);
+  const bottomReserved =
+    (headerEdge === 'bottom' ? headerHeight + RESERVED_GAP : 0) +
+    (actionsEdge === 'bottom' ? actionsHeight + RESERVED_GAP : 0);
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['bottom']}
+      edges={['top', 'bottom']}
     >
-      <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={styles.toolbarButton} onPress={() => setTaggingTarget(folder)}>
-          <Ionicons name="pricetag-outline" size={16} color="#4c8bf5" />
-          <Text style={styles.toolbarButtonText}>タグを編集</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() =>
-            folder && rootNavigation.navigate('FolderPicker', { movingFolderId: folder.id })
-          }
-        >
-          <Ionicons name="folder-open-outline" size={16} color="#4c8bf5" />
-          <Text style={styles.toolbarButtonText}>このフォルダを移動</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.toolbarButton} onPress={() => setCreatingFolder(true)}>
-          <Ionicons name="add" size={16} color="#4c8bf5" />
-          <Text style={styles.toolbarButtonText}>新規フォルダ</Text>
-        </TouchableOpacity>
-        {imageUris.length > 0 && (
-          <TouchableOpacity style={styles.toolbarButton} onPress={toggleSelectionMode}>
-            <Ionicons
-              name={selectionMode ? 'checkmark-done-outline' : 'checkbox-outline'}
-              size={16}
-              color="#4c8bf5"
-            />
-            <Text style={styles.toolbarButtonText}>
-              {selectionMode ? '選択を終了' : '画像を選択'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {folder?.tags && folder.tags.length > 0 && (
-        <View style={styles.tagRow}>
-          {folder.tags.map((tag) => (
-            <View key={tag.id} style={styles.tagChip}>
-              <Text style={styles.tagText}>{tag.name}</Text>
+      <DraggableLayoutArea>
+        <View style={[styles.content, { paddingTop: topReserved, paddingBottom: bottomReserved }]}>
+          {folder?.tags && folder.tags.length > 0 && (
+            <View style={styles.tagRow}>
+              {folder.tags.map((tag) => (
+                <View key={tag.id} style={styles.tagChip}>
+                  <Text style={styles.tagText}>{tag.name}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-      )}
+          )}
 
-      <FlatList
-        data={items}
-        key={IMAGE_COLUMNS}
-        numColumns={IMAGE_COLUMNS}
-        keyExtractor={(item) =>
-          item.type === 'subfolder' ? `f-${item.folder.id}` : `i-${item.uri}`
-        }
-        renderItem={({ item }) => {
-          if (item.type === 'subfolder') {
-            return (
-              <View style={styles.fullWidthRow}>
-                <FolderRow
-                  folder={item.folder}
-                  onPress={() => navigation.push('FolderDetail', { folderId: item.folder.id })}
-                  onOpenMenu={() => setMenuFolder(item.folder)}
-                  onDelete={() => handleDeleteSubfolder(item.folder)}
-                  onJumpToSource={
-                    item.folder.sourceUrl ? () => handleJumpToSource(item.folder) : undefined
+          <FlatList
+            style={styles.list}
+            data={items}
+            key={IMAGE_COLUMNS}
+            numColumns={IMAGE_COLUMNS}
+            keyExtractor={(item) =>
+              item.type === 'subfolder' ? `f-${item.folder.id}` : `i-${item.uri}`
+            }
+            renderItem={({ item }) => {
+              if (item.type === 'subfolder') {
+                return (
+                  <View style={styles.fullWidthRow}>
+                    <FolderRow
+                      folder={item.folder}
+                      onPress={() => navigation.push('FolderDetail', { folderId: item.folder.id })}
+                      onOpenMenu={() => setMenuFolder(item.folder)}
+                      onDelete={() => handleDeleteSubfolder(item.folder)}
+                      onJumpToSource={
+                        item.folder.sourceUrl ? () => handleJumpToSource(item.folder) : undefined
+                      }
+                    />
+                  </View>
+                );
+              }
+              const selected = selectedUris.has(item.uri);
+              return (
+                <TouchableOpacity
+                  style={[styles.imageCell, { backgroundColor: colors.surface }]}
+                  onPress={() =>
+                    selectionMode
+                      ? toggleImageSelected(item.uri)
+                      : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
                   }
-                />
-              </View>
-            );
-          }
-          const selected = selectedUris.has(item.uri);
-          return (
+                >
+                  <Image source={{ uri: item.uri }} style={styles.imageThumb} resizeMode="cover" />
+                  {selectionMode && (
+                    <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>
+                      <Ionicons
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={20}
+                        color={selected ? '#4c8bf5' : '#fff'}
+                      />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+            contentContainerStyle={[
+              styles.listContent,
+              selectionMode && styles.listContentWithFooter,
+            ]}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                このフォルダは空です
+              </Text>
+            }
+          />
+        </View>
+
+        <ControlGroup
+          screenId={HEADER_SCREEN_ID}
+          variant="bar"
+          defaultAnchor="top"
+          edgesOnly
+          stackPeerId={ACTIONS_SCREEN_ID}
+          onMeasured={(size) => setHeaderHeight(size.height)}
+        >
+          <View style={[styles.headerBar, { backgroundColor: colors.card }]}>
             <TouchableOpacity
-              style={[styles.imageCell, { backgroundColor: colors.surface }]}
+              onPress={() => navigation.goBack()}
+              accessibilityLabel="back-to-folder-list"
+              hitSlop={8}
+            >
+              <Ionicons name="arrow-back" size={20} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+              {folder?.name ?? ''}
+            </Text>
+          </View>
+        </ControlGroup>
+
+        <ControlGroup
+          screenId={ACTIONS_SCREEN_ID}
+          variant="bar"
+          defaultAnchor="top"
+          edgesOnly
+          stackPeerId={HEADER_SCREEN_ID}
+          onMeasured={(size) => setActionsHeight(size.height)}
+        >
+          <View style={[styles.toolbar, { backgroundColor: colors.card }]}>
+            <TouchableOpacity style={styles.toolbarButton} onPress={() => setTaggingTarget(folder)}>
+              <Ionicons name="pricetag-outline" size={16} color="#4c8bf5" />
+              <Text style={styles.toolbarButtonText}>タグを編集</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.toolbarButton}
               onPress={() =>
-                selectionMode
-                  ? toggleImageSelected(item.uri)
-                  : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
+                folder && rootNavigation.navigate('FolderPicker', { movingFolderId: folder.id })
               }
             >
-              <Image source={{ uri: item.uri }} style={styles.imageThumb} resizeMode="cover" />
-              {selectionMode && (
-                <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>
-                  <Ionicons
-                    name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={20}
-                    color={selected ? '#4c8bf5' : '#fff'}
-                  />
-                </View>
-              )}
+              <Ionicons name="folder-open-outline" size={16} color="#4c8bf5" />
+              <Text style={styles.toolbarButtonText}>このフォルダを移動</Text>
             </TouchableOpacity>
-          );
-        }}
-        contentContainerStyle={[styles.listContent, selectionMode && styles.listContentWithFooter]}
-        ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-            このフォルダは空です
-          </Text>
-        }
-      />
+            <TouchableOpacity style={styles.toolbarButton} onPress={() => setCreatingFolder(true)}>
+              <Ionicons name="add" size={16} color="#4c8bf5" />
+              <Text style={styles.toolbarButtonText}>新規フォルダ</Text>
+            </TouchableOpacity>
+            {imageUris.length > 0 && (
+              <TouchableOpacity style={styles.toolbarButton} onPress={toggleSelectionMode}>
+                <Ionicons
+                  name={selectionMode ? 'checkmark-done-outline' : 'checkbox-outline'}
+                  size={16}
+                  color="#4c8bf5"
+                />
+                <Text style={styles.toolbarButtonText}>
+                  {selectionMode ? '選択を終了' : '画像を選択'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ControlGroup>
+      </DraggableLayoutArea>
 
       {selectionMode && (
         <View
@@ -347,13 +410,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  content: {
+    flex: 1,
+  },
+  list: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
   toolbar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
+    borderRadius: 14,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
   toolbarButton: {
     flexDirection: 'row',
@@ -372,6 +463,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingTop: 8,
+    marginBottom: 10,
   },
   tagChip: {
     backgroundColor: '#eef3ff',

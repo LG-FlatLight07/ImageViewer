@@ -18,6 +18,7 @@ type Registry = {
   register: (id: string, rect: RegisteredRect) => void;
   unregister: (id: string) => void;
   getOthers: (excludeId: string) => RegisteredRect[];
+  getRect: (id: string) => RegisteredRect | undefined;
 };
 
 const RegistryContext = createContext<Registry | null>(null);
@@ -31,8 +32,22 @@ export function useControlGroupRegistry(): Registry {
   return registry;
 }
 
+const RegistryVersionContext = createContext(0);
+
+/**
+ * A number that increments every time any ControlGroup registers or
+ * unregisters. A group whose own geometry hasn't changed can include this in
+ * an effect's dependency array to react to a SIBLING's rect changing (e.g.
+ * to re-check for a new overlap), which plain object/function identity from
+ * `useControlGroupRegistry` can't signal since those stay stable references.
+ */
+export function useRegistryVersion(): number {
+  return useContext(RegistryVersionContext);
+}
+
 export function DraggableLayoutArea({ children }: { children: React.ReactNode }) {
   const [bounds, setBounds] = useState<Bounds>({ width: 0, height: 0 });
+  const [version, setVersion] = useState(0);
   const editMode = useLayoutStore((state) => state.editMode);
   const rectsRef = useRef<Map<string, RegisteredRect>>(new Map());
 
@@ -40,14 +55,17 @@ export function DraggableLayoutArea({ children }: { children: React.ReactNode })
     () => ({
       register: (id, rect) => {
         rectsRef.current.set(id, rect);
+        setVersion((v) => v + 1);
       },
       unregister: (id) => {
         rectsRef.current.delete(id);
+        setVersion((v) => v + 1);
       },
       getOthers: (excludeId) =>
         Array.from(rectsRef.current.entries())
           .filter(([id]) => id !== excludeId)
           .map(([, rect]) => rect),
+      getRect: (id) => rectsRef.current.get(id),
     }),
     [],
   );
@@ -60,10 +78,12 @@ export function DraggableLayoutArea({ children }: { children: React.ReactNode })
   return (
     <BoundsContext.Provider value={bounds}>
       <RegistryContext.Provider value={registry}>
-        <View style={styles.fill} onLayout={handleLayout}>
-          {children}
-          {editMode && <View pointerEvents="auto" style={styles.dim} />}
-        </View>
+        <RegistryVersionContext.Provider value={version}>
+          <View style={styles.fill} onLayout={handleLayout}>
+            {children}
+            {editMode && <View pointerEvents="auto" style={styles.dim} />}
+          </View>
+        </RegistryVersionContext.Provider>
       </RegistryContext.Provider>
     </BoundsContext.Provider>
   );

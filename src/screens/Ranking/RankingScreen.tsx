@@ -1,11 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  LayoutAnimation,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import {
   getDownloadRanking,
@@ -51,14 +67,19 @@ export function RankingScreen() {
 
   const periodIndex = PERIOD_OPTIONS.findIndex((option) => option.key === period);
 
+  const changePeriod = useCallback((next: RankingPeriod) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPeriod(next);
+  }, []);
+
   const switchPeriod = useCallback(
     (delta: number) => {
       const nextIndex = Math.min(PERIOD_OPTIONS.length - 1, Math.max(0, periodIndex + delta));
       if (nextIndex !== periodIndex) {
-        setPeriod(PERIOD_OPTIONS[nextIndex].key);
+        changePeriod(PERIOD_OPTIONS[nextIndex].key);
       }
     },
-    [periodIndex],
+    [periodIndex, changePeriod],
   );
 
   const swipeGesture = Gesture.Pan()
@@ -93,7 +114,7 @@ export function RankingScreen() {
               { backgroundColor: colors.surface },
               period === option.key && { backgroundColor: colors.primary },
             ]}
-            onPress={() => setPeriod(option.key)}
+            onPress={() => changePeriod(option.key)}
           >
             <Text
               style={[
@@ -168,15 +189,63 @@ function RankingRow({
         </View>
       )}
       <View style={styles.rowTextGroup}>
-        <Text style={[styles.hostname, { color: colors.text }]} numberOfLines={1}>
-          {entry.displayName}
-        </Text>
+        <MarqueeText
+          text={entry.displayName}
+          textStyle={[styles.hostname, { color: colors.text }]}
+        />
         <Text style={[styles.url, { color: colors.secondaryText }]} numberOfLines={1}>
           {entry.sourceUrl}
         </Text>
       </View>
       <Text style={[styles.count, { color: colors.primary }]}>{entry.totalImages}枚</Text>
     </TouchableOpacity>
+  );
+}
+
+const MARQUEE_PAUSE_MS = 1200;
+const MARQUEE_PX_PER_SEC = 40;
+
+/** Scrolls its text horizontally in a loop only when it's too wide to fit, pausing briefly at each end. */
+function MarqueeText({ text, textStyle }: { text: string; textStyle?: object }) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [textWidth, setTextWidth] = useState(0);
+  const translateX = useSharedValue(0);
+  const overflowing = containerWidth > 0 && textWidth > containerWidth;
+
+  useEffect(() => {
+    if (!overflowing) {
+      translateX.value = 0;
+      return;
+    }
+    const distance = textWidth - containerWidth + 12;
+    const scrollDuration = (distance / MARQUEE_PX_PER_SEC) * 1000;
+    translateX.value = 0;
+    translateX.value = withRepeat(
+      withSequence(
+        withDelay(MARQUEE_PAUSE_MS, withTiming(-distance, { duration: scrollDuration })),
+        withDelay(MARQUEE_PAUSE_MS, withTiming(0, { duration: 0 })),
+      ),
+      -1,
+    );
+  }, [overflowing, textWidth, containerWidth, translateX]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View
+      style={styles.marqueeClip}
+      onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+    >
+      <Animated.Text
+        style={[textStyle, styles.marqueeText, animatedStyle]}
+        numberOfLines={1}
+        onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
+      >
+        {text}
+      </Animated.Text>
+    </View>
   );
 }
 
@@ -225,6 +294,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  marqueeClip: {
+    overflow: 'hidden',
+  },
+  marqueeText: {
+    alignSelf: 'flex-start',
   },
   rank: {
     width: 28,

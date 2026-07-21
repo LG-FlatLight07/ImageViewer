@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 
@@ -36,8 +36,11 @@ const VIEWER_DIRECTION_OPTIONS: { key: ImageViewerDirection; label: string }[] =
   { key: 'vertical', label: '縦スライド' },
 ];
 
+const FEEDBACK_TOAST_MS = 3000;
+
 export function SettingsScreen() {
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const db = useSQLiteContext();
   const rootNavigation = useRootNavigation();
   const editMode = useLayoutStore((state) => state.editMode);
@@ -56,6 +59,15 @@ export function SettingsScreen() {
   const removeFolderNameExclusion = useSettingsStore((state) => state.removeFolderNameExclusion);
   const [exclusionInput, setExclusionInput] = useState('');
   const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState(false);
+
+  useEffect(() => {
+    if (!feedbackToast) {
+      return;
+    }
+    const timer = setTimeout(() => setFeedbackToast(false), FEEDBACK_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [feedbackToast]);
 
   const commitExclusion = () => {
     if (exclusionInput.trim()) {
@@ -282,13 +294,18 @@ export function SettingsScreen() {
           setFeedbackVisible(false);
           if (value.trim()) {
             await submitFeedbackMessage(db, value);
-            Alert.alert(
-              'メッセージを保存しました',
-              '現在サーバーがないため端末内に保存されます。送信機能の追加後にまとめて送信される予定です。',
-            );
+            setFeedbackToast(true);
           }
         }}
       />
+
+      {feedbackToast && (
+        <View style={[styles.toastOverlay, { top: insets.top + 8 }]} pointerEvents="none">
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>メッセージありがとうございます。今後の参考にします</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -403,5 +420,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
+  },
+  toastOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  toast: {
+    backgroundColor: 'rgba(20, 20, 20, 0.92)',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    maxWidth: '90%',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });

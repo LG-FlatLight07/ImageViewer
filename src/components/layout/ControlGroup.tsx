@@ -6,7 +6,11 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-nativ
 
 import { useLayoutStore } from '../../store/layoutStore';
 import { useAppTheme } from '../../theme/theme';
-import { useControlGroupRegistry, useDraggableBounds } from './DraggableLayoutArea';
+import {
+  useControlGroupRegistry,
+  useDraggableBounds,
+  useRegistryVersion,
+} from './DraggableLayoutArea';
 import {
   anchorsByDistance,
   clampToEdgeAnchor,
@@ -20,7 +24,11 @@ import {
   type SemanticAnchor,
 } from './anchors';
 
-const MARGIN = 12;
+/** Edge inset for a full-width 'bar' group. */
+export const BAR_MARGIN = 12;
+/** Edge inset for a compact 'buttons' group — smaller so it hugs the screen corner. */
+const BUTTONS_MARGIN = 6;
+const STACK_GAP = 6;
 const MAX_HORIZONTAL_WIDTH = 220;
 
 type Size = { width: number; height: number };
@@ -41,6 +49,12 @@ type ControlGroupProps = {
    * (no intermediate positions). Meaningless for 'buttons' groups.
    */
   edgesOnly?: boolean;
+  /**
+   * screenId of one other `edgesOnly` group to coordinate with: when both
+   * resolve to the same edge, the less-recently-moved one stacks flush
+   * against the other instead of overlapping it. Requires edgesOnly.
+   */
+  stackPeerId?: string;
   /** Fires whenever this group's rendered size changes (e.g. so a screen can reserve scroll-content space for it). */
   onMeasured?: (size: Size) => void;
 };
@@ -51,29 +65,59 @@ export function ControlGroup({
   variant = 'buttons',
   defaultAnchor = 'bottomRight',
   edgesOnly = false,
+  stackPeerId,
   onMeasured,
 }: ControlGroupProps) {
   const { colors } = useAppTheme();
   const editMode = useLayoutStore((state) => state.editMode);
   const storedLayout = useLayoutStore((state) => state.layouts[screenId]);
+  const peerLayout = useLayoutStore((state) =>
+    stackPeerId ? state.layouts[stackPeerId] : undefined,
+  );
   const setAnchor = useLayoutStore((state) => state.setAnchor);
+  const relocateAnchor = useLayoutStore((state) => state.relocateAnchor);
   const setArrangement = useLayoutStore((state) => state.setArrangement);
   const bounds = useDraggableBounds();
   const registry = useControlGroupRegistry();
+  const registryVersion = useRegistryVersion();
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [dragging, setDragging] = useState(false);
 
   const isBar = variant === 'bar';
-  const barWidth = bounds.width > 0 ? Math.max(bounds.width - MARGIN * 2, 0) : size.width;
+  const EDGE_MARGIN = isBar ? BAR_MARGIN : BUTTONS_MARGIN;
+  const barWidth = bounds.width > 0 ? Math.max(bounds.width - EDGE_MARGIN * 2, 0) : size.width;
   const effectiveSize = isBar ? { width: barWidth, height: size.height } : size;
   const effectiveWidth = effectiveSize.width;
   const effectiveHeight = effectiveSize.height;
   const arrangement = storedLayout?.arrangement ?? DEFAULT_ARRANGEMENT;
   const rawAnchor =
-    storedLayout?.anchor ?? resolveSemanticAnchor(defaultAnchor, bounds, effectiveSize, MARGIN);
+    storedLayout?.anchor ??
+    resolveSemanticAnchor(defaultAnchor, bounds, effectiveSize, EDGE_MARGIN);
   const anchor = edgesOnly ? clampToEdgeAnchor(rawAnchor) : rawAnchor;
 
-  const origin = getAnchorOrigin(anchor, bounds, effectiveSize, MARGIN);
+  const origin = getAnchorOrigin(anchor, bounds, effectiveSize, EDGE_MARGIN);
+
+  // If a stacking peer is configured and both of us resolve to the same
+  // edge, the less-recently-moved group (older/undefined movedAt) stacks
+  // flush against the other rather than sitting on top of it.
+  let renderOrigin = origin;
+  if (stackPeerId && edgesOnly) {
+    const peerRect = registry.getRect(stackPeerId);
+    const peerEdge = clampToEdgeAnchor(peerLayout?.anchor ?? EDGE_TOP_ANCHOR);
+    const myMovedAt = storedLayout?.movedAt;
+    const peerMovedAt = peerLayout?.movedAt;
+    const iAmPrimary =
+      myMovedAt !== undefined || peerMovedAt !== undefined
+        ? (myMovedAt ?? 0) >= (peerMovedAt ?? 0)
+        : screenId < stackPeerId;
+    if (peerRect && peerEdge === anchor && !iAmPrimary) {
+      renderOrigin =
+        anchor === EDGE_TOP_ANCHOR
+          ? { x: origin.x, y: peerRect.y + peerRect.height + STACK_GAP }
+          : { x: origin.x, y: peerRect.y - STACK_GAP - effectiveSize.height };
+    }
+  }
+
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const startX = useSharedValue(0);
@@ -96,8 +140,8 @@ export function ControlGroup({
       return;
     }
     registry.register(screenId, {
-      x: origin.x,
-      y: origin.y,
+      x: renderOrigin.x,
+      y: renderOrigin.y,
       width: effectiveSize.width,
       height: effectiveSize.height,
       variant,
@@ -107,21 +151,31 @@ export function ControlGroup({
     registry,
     screenId,
     variant,
-    origin.x,
-    origin.y,
+    renderOrigin.x,
+    renderOrigin.y,
     effectiveSize.width,
     effectiveSize.height,
     bounds.width,
   ]);
 
-  // If this (non-bar) group ends up overlapping a bar-variant sibling — most
-  // commonly because the bar grew after we were placed, e.g. tag suggestions
-  // expanding a search bar — relocate ourselves to the nearest free anchor.
-  // Bars stay put (their position is deliberately edge-locked); buttons
-  // groups are the ones expected to step out of the way.
+  // If this (non-bar, non-stacking) group ends up overlapping a bar-variant
+  // sibling — most commonly because the bar grew after we were placed, e.g.
+  // tag suggestions expanding a search bar — relocate ourselves to the
+  // nearest free anchor. Bars stay put (their position is deliberately
+  // edge-locked); buttons groups are the ones expected to step out of the
+  // way. `registryVersion` is unused directly but its presence in the
+  // dependency array is what makes this re-check whenever ANY sibling's
+  // registration changes, not just this group's own geometry. Groups using
+  // `stackPeerId` coordinate via the stacking logic above instead.
   const lastAvoidKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (variant !== 'buttons' || dragging || bounds.width === 0 || effectiveWidth === 0) {
+    if (
+      variant !== 'buttons' ||
+      stackPeerId ||
+      dragging ||
+      bounds.width === 0 ||
+      effectiveWidth === 0
+    ) {
       return;
     }
     const size = { width: effectiveWidth, height: effectiveHeight };
@@ -140,18 +194,19 @@ export function ControlGroup({
     lastAvoidKeyRef.current = key;
     const center = { x: origin.x + size.width / 2, y: origin.y + size.height / 2 };
     const others = registry.getOthers(screenId);
-    const free = anchorsByDistance(center, bounds, size, MARGIN)
+    const free = anchorsByDistance(center, bounds, size, EDGE_MARGIN)
       .filter((candidate) => candidate !== anchor)
       .find((candidate) => {
-        const candidateOrigin = getAnchorOrigin(candidate, bounds, size, MARGIN);
+        const candidateOrigin = getAnchorOrigin(candidate, bounds, size, EDGE_MARGIN);
         const rect2 = { x: candidateOrigin.x, y: candidateOrigin.y, ...size };
         return !others.some((other) => rectsOverlap(rect2, other));
       });
     if (free !== undefined) {
-      setAnchor(screenId, free);
+      relocateAnchor(screenId, free);
     }
   }, [
     variant,
+    stackPeerId,
     dragging,
     bounds,
     origin.x,
@@ -160,8 +215,10 @@ export function ControlGroup({
     effectiveHeight,
     anchor,
     registry,
+    registryVersion,
     screenId,
-    setAnchor,
+    relocateAnchor,
+    EDGE_MARGIN,
   ]);
 
   const commitDrop = (dx: number, dy: number) => {
@@ -172,16 +229,16 @@ export function ControlGroup({
       return;
     }
     const target = {
-      x: origin.x + effectiveSize.width / 2 + dx,
-      y: origin.y + effectiveSize.height / 2 + dy,
+      x: renderOrigin.x + effectiveSize.width / 2 + dx,
+      y: renderOrigin.y + effectiveSize.height / 2 + dy,
     };
-    const allCandidates = anchorsByDistance(target, bounds, effectiveSize, MARGIN);
+    const allCandidates = anchorsByDistance(target, bounds, effectiveSize, EDGE_MARGIN);
     const candidates = edgesOnly
       ? allCandidates.filter((a) => a === EDGE_TOP_ANCHOR || a === EDGE_BOTTOM_ANCHOR)
       : allCandidates;
     const others = registry.getOthers(screenId);
     const nonOverlapping = candidates.find((candidate) => {
-      const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, MARGIN);
+      const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, EDGE_MARGIN);
       const rect = {
         x: candidateOrigin.x,
         y: candidateOrigin.y,
@@ -218,7 +275,7 @@ export function ControlGroup({
         <Animated.View
           style={[
             styles.container,
-            { top: origin.y, left: origin.x },
+            { top: renderOrigin.y, left: renderOrigin.x },
             isBar && { width: barWidth },
             animatedStyle,
           ]}
@@ -261,6 +318,7 @@ export function ControlGroup({
             size={effectiveSize}
             current={anchor}
             activeColor={colors.primary}
+            margin={EDGE_MARGIN}
             allowed={edgesOnly ? [EDGE_TOP_ANCHOR, EDGE_BOTTOM_ANCHOR] : undefined}
           />
         </View>
@@ -274,12 +332,14 @@ function AnchorTargets({
   size,
   current,
   activeColor,
+  margin,
   allowed,
 }: {
   bounds: Size;
   size: Size;
   current: Anchor;
   activeColor: string;
+  margin: number;
   allowed?: Anchor[];
 }) {
   return (
@@ -287,7 +347,7 @@ function AnchorTargets({
       {Array.from({ length: 32 }, (_, index) => index)
         .filter((index) => !allowed || allowed.includes(index))
         .map((index) => {
-          const target = getAnchorOrigin(index, bounds, size, MARGIN);
+          const target = getAnchorOrigin(index, bounds, size, margin);
           return (
             <View
               key={index}

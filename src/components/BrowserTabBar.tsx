@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -32,10 +32,19 @@ export function BrowserTabBar({
   onNewTab,
 }: BrowserTabBarProps) {
   const { colors } = useAppTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  const tabCount = tabs.length;
+
+  useEffect(() => {
+    // New tabs are always appended at the end, so scrolling to the end
+    // brings a freshly-opened tab into view when the bar overflows.
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, [tabCount]);
 
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

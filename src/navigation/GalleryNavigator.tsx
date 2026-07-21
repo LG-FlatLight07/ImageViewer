@@ -16,7 +16,11 @@ export function GalleryNavigator() {
         component={FolderListScreen}
         options={{ title: 'ギャラリー' }}
       />
-      <Stack.Screen name="FolderDetail" component={FolderDetailScreen} />
+      <Stack.Screen
+        name="FolderDetail"
+        component={FolderDetailScreen}
+        options={{ headerShown: false }}
+      />
       <Stack.Screen
         name="ImageViewer"
         component={ImageViewerScreen}

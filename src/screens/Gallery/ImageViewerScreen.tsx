@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -25,7 +25,27 @@ const GAP = 2;
 const DISMISS_DISTANCE = 100;
 const DISMISS_VELOCITY = 800;
 
-type PageItem = { uri: string; folderId: string };
+type PageItem = { uri: string; folderId: string; width: number; height: number };
+
+/** width/height are 0 if the size couldn't be read; callers fall back to a full-screen slot in that case. */
+function getImageSize(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      () => resolve({ width: 0, height: 0 }),
+    );
+  });
+}
+
+async function buildPages(items: { uri: string; folderId: string }[]): Promise<PageItem[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      const { width, height } = await getImageSize(item.uri);
+      return { ...item, width, height };
+    }),
+  );
+}
 
 export function ImageViewerScreen() {
   const db = useSQLiteContext();
@@ -35,15 +55,14 @@ export function ImageViewerScreen() {
   const direction = useSettingsStore((state) => state.imageViewerDirection);
 
   const [pages, setPages] = useState<PageItem[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(startIndex);
 
   const load = useCallback(async () => {
     const folder = await getFolder(db, folderId);
     const currentImages = await listFolderImageUris(folder);
-    const currentPages = currentImages.map((uri) => ({ uri, folderId }));
+    const currentItems = currentImages.map((uri) => ({ uri, folderId }));
 
     if (!folder) {
-      setPages(currentPages);
+      setPages(await buildPages(currentItems));
       return;
     }
 
@@ -52,12 +71,13 @@ export function ImageViewerScreen() {
     const nextFolder = ownIndex >= 0 ? siblings[ownIndex + 1] : undefined;
 
     if (!nextFolder) {
-      setPages(currentPages);
+      setPages(await buildPages(currentItems));
       return;
     }
 
     const nextImages = await listFolderImageUris(nextFolder);
-    setPages([...currentPages, ...nextImages.map((uri) => ({ uri, folderId: nextFolder.id }))]);
+    const nextItems = nextImages.map((uri) => ({ uri, folderId: nextFolder.id }));
+    setPages(await buildPages([...currentItems, ...nextItems]));
   }, [db, folderId]);
 
   useEffect(() => {
@@ -65,13 +85,6 @@ export function ImageViewerScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
-
-  const isHorizontal = direction === 'horizontal';
-  const pageSize = isHorizontal ? SCREEN_WIDTH : SCREEN_HEIGHT;
-
-  const translateMain = useSharedValue(-startIndex * pageSize);
-  const translateCross = useSharedValue(0);
-  const startMain = useSharedValue(-startIndex * pageSize);
 
   const closeViewer = useCallback(() => {
     navigation.goBack();
@@ -84,19 +97,106 @@ export function ImageViewerScreen() {
     navigation.popToTop();
   }, [navigation]);
 
+  if (pages.length === 0) {
+    return <View style={styles.container} />;
+  }
+
+  return (
+    <ImageViewerContent
+      pages={pages}
+      startIndex={startIndex}
+      isHorizontal={direction === 'horizontal'}
+      onClose={closeViewer}
+      onDismiss={dismissToGallery}
+    />
+  );
+}
+
+/**
+ * Only mounts once `pages` (with real image dimensions already resolved) is
+ * non-empty, so the initial scroll-position shared values below are correct
+ * from their very first render — no need to "correct" them later via an
+ * effect, which would require mutating a shared value from inside a
+ * useEffect (not allowed by the reanimated/react-hooks lint rule).
+ */
+function ImageViewerContent({
+  pages,
+  startIndex,
+  isHorizontal,
+  onClose,
+  onDismiss,
+}: {
+  pages: PageItem[];
+  startIndex: number;
+  isHorizontal: boolean;
+  onClose: () => void;
+  onDismiss: () => void;
+}) {
+  const pageSize = isHorizontal ? SCREEN_WIDTH : SCREEN_HEIGHT;
+
+  // Horizontal paging keeps a uniform pageSize per page (unchanged). Vertical
+  // paging instead sizes each slot to that image's own contain-fit height,
+  // so a wide image doesn't leave big empty letterboxing in the scroll
+  // direction — which is what made the gap between images look inconsistent
+  // and caused jitter as those blank regions scrolled past.
+  const pageHeights = useMemo(
+    () =>
+      pages.map((page) =>
+        page.width > 0 && page.height > 0
+          ? Math.min(SCREEN_HEIGHT, SCREEN_WIDTH * (page.height / page.width))
+          : SCREEN_HEIGHT,
+      ),
+    [pages],
+  );
+  const pageOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let acc = 0;
+    for (let i = 0; i < pageHeights.length; i += 1) {
+      offsets.push(acc);
+      acc += pageHeights[i] + GAP;
+    }
+    return offsets;
+  }, [pageHeights]);
+  const verticalTrackHeight =
+    pageOffsets.length > 0
+      ? pageOffsets[pageOffsets.length - 1] + pageHeights[pageHeights.length - 1]
+      : 0;
+
+  const clampedStartIndex = Math.max(0, Math.min(pages.length - 1, startIndex));
+  const initialMain = isHorizontal
+    ? -clampedStartIndex * pageSize
+    : -(pageOffsets[clampedStartIndex] ?? 0);
+
+  const translateMain = useSharedValue(initialMain);
+  const translateCross = useSharedValue(0);
+  const startMain = useSharedValue(initialMain);
+  const [currentIndex, setCurrentIndex] = useState(clampedStartIndex);
+
   const setIndex = useCallback((index: number) => {
     setCurrentIndex(index);
   }, []);
 
   useAnimatedReaction(
-    () => Math.round(-translateMain.value / pageSize),
+    () => {
+      if (isHorizontal) {
+        return Math.round(-translateMain.value / pageSize);
+      }
+      const pos = -translateMain.value;
+      let found = 0;
+      for (let i = 0; i < pageOffsets.length; i += 1) {
+        if (pageOffsets[i] <= pos + 1) {
+          found = i;
+        }
+      }
+      return found;
+    },
     (value, previous) => {
-      if (value !== previous && pages.length > 0) {
+      if (value !== previous) {
         const clamped = Math.max(0, Math.min(pages.length - 1, value));
         runOnJS(setIndex)(clamped);
       }
     },
-    [pages.length, pageSize],
+    [pages.length, pageSize, isHorizontal, pageOffsets],
   );
 
   const pan = Gesture.Pan()
@@ -118,7 +218,7 @@ export function ImageViewerScreen() {
         const sign = translateCross.value >= 0 ? 1 : -1;
         translateCross.value = withTiming(sign * pageSize, { duration: 200 }, (finished) => {
           if (finished) {
-            runOnJS(dismissToGallery)();
+            runOnJS(onDismiss)();
           }
         });
         return;
@@ -127,7 +227,9 @@ export function ImageViewerScreen() {
 
       // Free-scroll: let the fling decay naturally instead of snapping to a page.
       const mainVelocity = isHorizontal ? event.velocityX : event.velocityY;
-      const minTranslate = -(Math.max(pages.length - 1, 0) * pageSize);
+      const minTranslate = isHorizontal
+        ? -(Math.max(pages.length - 1, 0) * pageSize)
+        : -(pageOffsets.length > 0 ? pageOffsets[pageOffsets.length - 1] : 0);
       translateMain.value = withDecay({
         velocity: mainVelocity,
         clamp: [minTranslate, 0],
@@ -147,7 +249,7 @@ export function ImageViewerScreen() {
           style={[
             isHorizontal
               ? { width: pageSize * Math.max(pages.length, 1), height: SCREEN_HEIGHT }
-              : { width: SCREEN_WIDTH, height: pageSize * Math.max(pages.length, 1) },
+              : { width: SCREEN_WIDTH, height: Math.max(verticalTrackHeight, SCREEN_HEIGHT) },
             styles.track,
             trackAnimatedStyle,
           ]}
@@ -159,7 +261,11 @@ export function ImageViewerScreen() {
                 styles.page,
                 isHorizontal
                   ? { left: index * pageSize, top: 0 }
-                  : { top: index * pageSize, left: 0 },
+                  : {
+                      top: pageOffsets[index] ?? 0,
+                      left: 0,
+                      height: pageHeights[index] ?? SCREEN_HEIGHT,
+                    },
               ]}
             >
               <Image
@@ -167,7 +273,7 @@ export function ImageViewerScreen() {
                 style={
                   isHorizontal
                     ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
-                    : { width: SCREEN_WIDTH, height: pageSize - GAP }
+                    : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
                 }
                 resizeMode="contain"
               />
@@ -177,11 +283,11 @@ export function ImageViewerScreen() {
       </GestureDetector>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={closeViewer} accessibilityLabel="close" hitSlop={8}>
+        <TouchableOpacity onPress={onClose} accessibilityLabel="close" hitSlop={8}>
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.counter}>
-          {pages.length > 0 ? currentIndex + 1 : 0} / {pages.length}
+          {currentIndex + 1} / {pages.length}
         </Text>
       </View>
     </View>

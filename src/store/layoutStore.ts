@@ -7,6 +7,8 @@ import type { Anchor, Arrangement } from '../components/layout/anchors';
 export type ScreenLayout = {
   anchor?: Anchor;
   arrangement?: Arrangement;
+  /** Set only by a genuine user drag (setAnchor), never by automatic relocation — used to break ties in the stacking system ("the more recently moved UI wins"). */
+  movedAt?: number;
 };
 
 type LayoutState = {
@@ -14,6 +16,8 @@ type LayoutState = {
   layouts: Record<string, ScreenLayout>;
   setEditMode: (editMode: boolean) => void;
   setAnchor: (screenId: string, anchor: Anchor) => void;
+  /** Same as setAnchor but doesn't stamp movedAt — used by automatic overlap avoidance so it never outranks a real user drag. */
+  relocateAnchor: (screenId: string, anchor: Anchor) => void;
   setArrangement: (screenId: string, arrangement: Arrangement) => void;
   resetAll: () => void;
 };
@@ -25,6 +29,13 @@ export const useLayoutStore = create<LayoutState>()(
       layouts: {},
       setEditMode: (editMode) => set({ editMode }),
       setAnchor: (screenId, anchor) =>
+        set((state) => ({
+          layouts: {
+            ...state.layouts,
+            [screenId]: { ...state.layouts[screenId], anchor, movedAt: Date.now() },
+          },
+        })),
+      relocateAnchor: (screenId, anchor) =>
         set((state) => ({
           layouts: { ...state.layouts, [screenId]: { ...state.layouts[screenId], anchor } },
         })),

@@ -22,10 +22,11 @@ export function LayoutEditBanner() {
   };
 
   return (
-    <View style={[styles.overlay, { top: insets.top + 8 }]} pointerEvents="box-none">
+    <View style={[styles.overlay, { top: insets.top + 6 }]} pointerEvents="box-none">
       <View style={styles.banner}>
-        <Text style={styles.text}>
-          レイアウト編集中: ドラッグで端にドッキング、右上の切替ボタンで並び方を変更できます
+        {/* pointerEvents=none so a drag started on top of the label reaches the UI underneath. */}
+        <Text style={styles.text} pointerEvents="none">
+          レイアウト編集中
         </Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.button} onPress={confirmReset}>
@@ -53,32 +54,32 @@ const styles = StyleSheet.create({
     elevation: 1000,
   },
   banner: {
-    backgroundColor: 'rgba(20, 20, 20, 0.92)',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 20, 0.85)',
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    gap: 8,
     maxWidth: '92%',
   },
   text: {
     color: '#fff',
-    fontSize: 13,
-    marginBottom: 6,
-    textAlign: 'center',
+    fontSize: 11,
   },
   buttonRow: {
     flexDirection: 'row',
   },
   button: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    marginHorizontal: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    marginLeft: 4,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
   buttonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   doneButton: {

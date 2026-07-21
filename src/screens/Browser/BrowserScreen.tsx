@@ -10,7 +10,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { URLBar } from '../../components/URLBar';
 import { BrowserTabBar } from '../../components/BrowserTabBar';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
-import { ControlGroup } from '../../components/layout/ControlGroup';
+import { ControlGroup, BAR_MARGIN } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore, useActiveBrowserTab } from '../../store/browserStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -26,7 +26,7 @@ import { useAppTheme } from '../../theme/theme';
 
 const BUTTONS_SCREEN_ID = 'browser.buttons';
 const CHROME_SCREEN_ID = 'browser.chrome';
-const CHROME_GAP = 12;
+const CHROME_GAP = 16;
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
@@ -105,7 +105,14 @@ export function BrowserScreen() {
     }
   };
 
+  // Captures the page being scanned at the moment the scan is triggered, so
+  // that if the user switches tabs or navigates before the async postMessage
+  // arrives, the download is still attributed to the page that was actually
+  // scanned rather than whatever tab happens to be active on arrival.
+  const scanContextRef = useRef<{ url: string; inputValue: string } | null>(null);
+
   const handleSaveImages = () => {
+    scanContextRef.current = { url, inputValue };
     webViewRef.current?.injectJavaScript(IMAGE_SCAN_SCRIPT);
   };
 
@@ -129,10 +136,11 @@ export function BrowserScreen() {
     if (!result) {
       return;
     }
+    const context = scanContextRef.current ?? { url, inputValue };
     const { primaryGroup, otherImages } = detectImageGroups(result.images);
     rootNavigation.navigate('ImageSelection', {
-      pageTitle: result.pageTitle || inputValue,
-      sourceUrl: url,
+      pageTitle: result.pageTitle || context.inputValue,
+      sourceUrl: context.url,
       primaryGroup,
       otherImages,
     });
@@ -177,8 +185,8 @@ export function BrowserScreen() {
           style={[
             styles.webview,
             chromeAtBottom
-              ? { marginBottom: chromeHeight + CHROME_GAP }
-              : { marginTop: chromeHeight + CHROME_GAP },
+              ? { marginBottom: BAR_MARGIN + chromeHeight + CHROME_GAP }
+              : { marginTop: BAR_MARGIN + chromeHeight + CHROME_GAP },
           ]}
           onNavigationStateChange={handleNavigationStateChange}
           onMessage={handleMessage}
@@ -225,11 +233,13 @@ export function BrowserScreen() {
           {chromeAtBottom ? (
             <>
               {tabBarElement}
+              <View style={styles.chromeGap} />
               {urlBarElement}
             </>
           ) : (
             <>
               {urlBarElement}
+              <View style={styles.chromeGap} />
               {tabBarElement}
             </>
           )}
@@ -254,6 +264,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderWidth: 3,
     borderColor: '#6d3fc0',
+  },
+  chromeGap: {
+    height: 10,
   },
   toolbarButton: {
     width: 40,
