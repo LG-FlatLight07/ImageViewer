@@ -50,7 +50,7 @@ export function BrowserScreen() {
     closeTab,
     setActiveTabId,
   } = useBrowserStore();
-  const { url, inputValue, title, canGoBack, canGoForward, loading } = activeTab;
+  const { url, inputValue, currentUrl, title, canGoBack, canGoForward, loading } = activeTab;
   const chromeAnchor = useLayoutStore((state) => state.layouts[CHROME_SCREEN_ID]?.anchor);
   const chromeAtBottom = chromeAnchor === EDGE_BOTTOM_ANCHOR;
 
@@ -59,7 +59,7 @@ export function BrowserScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    isBookmarked(db, url).then((result) => {
+    isBookmarked(db, currentUrl).then((result) => {
       if (!cancelled) {
         setBookmarked(result);
       }
@@ -67,7 +67,7 @@ export function BrowserScreen() {
     return () => {
       cancelled = true;
     };
-  }, [db, url]);
+  }, [db, currentUrl]);
 
   useEffect(() => {
     const applyHomeUrl = () => {
@@ -99,6 +99,7 @@ export function BrowserScreen() {
       canGoBack: navState.canGoBack,
       canGoForward: navState.canGoForward,
       title: navState.title,
+      currentUrl: navState.url,
     });
     setInputValue(navState.url);
     setLoading(navState.loading);
@@ -111,19 +112,23 @@ export function BrowserScreen() {
   // that if the user switches tabs or navigates before the async postMessage
   // arrives, the download is still attributed to the page that was actually
   // scanned rather than whatever tab happens to be active on arrival.
-  const scanContextRef = useRef<{ url: string; inputValue: string } | null>(null);
+  // Uses currentUrl (the actual displayed page, synced on every navigation),
+  // not the address-bar inputValue or the WebView's initial `url` — those
+  // don't track in-page/SPA navigation and previously caused downloads to be
+  // attributed to the wrong page within the (correct) site.
+  const scanContextRef = useRef<{ pageUrl: string; pageTitle: string } | null>(null);
 
   const handleSaveImages = () => {
-    scanContextRef.current = { url, inputValue };
+    scanContextRef.current = { pageUrl: currentUrl, pageTitle: title || inputValue };
     webViewRef.current?.injectJavaScript(IMAGE_SCAN_SCRIPT);
   };
 
   const handleToggleBookmark = async () => {
     if (bookmarked) {
-      await removeBookmarkByUrl(db, url);
+      await removeBookmarkByUrl(db, currentUrl);
       setBookmarked(false);
     } else {
-      await addBookmark(db, { url, title: title || url });
+      await addBookmark(db, { url: currentUrl, title: title || currentUrl });
       setBookmarked(true);
     }
   };
@@ -138,11 +143,14 @@ export function BrowserScreen() {
     if (!result) {
       return;
     }
-    const context = scanContextRef.current ?? { url, inputValue };
+    const context = scanContextRef.current ?? {
+      pageUrl: currentUrl,
+      pageTitle: title || inputValue,
+    };
     const { primaryGroup, otherImages } = detectImageGroups(result.images);
     rootNavigation.navigate('ImageSelection', {
-      pageTitle: result.pageTitle || context.inputValue,
-      sourceUrl: context.url,
+      pageTitle: result.pageTitle || context.pageTitle,
+      sourceUrl: context.pageUrl,
       primaryGroup,
       otherImages,
     });

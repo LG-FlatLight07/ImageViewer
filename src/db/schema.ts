@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -74,6 +74,38 @@ const MIGRATIONS: Record<number, string> = {
     );
 
     CREATE INDEX IF NOT EXISTS idx_download_history_page_url ON download_history(page_url);
+  `,
+  7: `
+    -- Ranking's data must be able to outlive the local folder it came from
+    -- (deleting a downloaded folder shouldn't erase its ranking contribution)
+    -- and, longer-term, move to a server shared across all app users — so it
+    -- is its own append-only table with no foreign key to folders at all,
+    -- rather than being derived from folders/download_history at query time.
+    CREATE TABLE IF NOT EXISTS ranking_stats (
+      id TEXT PRIMARY KEY NOT NULL,
+      page_url TEXT NOT NULL,
+      page_title TEXT NOT NULL,
+      thumbnail_uri TEXT,
+      image_count INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ranking_stats_page_url ON ranking_stats(page_url);
+    CREATE INDEX IF NOT EXISTS idx_ranking_stats_created_at ON ranking_stats(created_at);
+
+    -- One-time backfill so existing downloads don't vanish from the ranking
+    -- just because this table didn't exist yet when they were downloaded.
+    INSERT INTO ranking_stats (id, page_url, page_title, thumbnail_uri, image_count, created_at)
+    SELECT lower(hex(randomblob(16))),
+           COALESCE(dh.page_url, f.source_url),
+           COALESCE(dh.page_title, f.name),
+           dh.first_image_uri,
+           f.image_count,
+           f.created_at
+    FROM folders f
+    LEFT JOIN download_history dh ON dh.folder_id = f.id
+    WHERE COALESCE(dh.page_url, f.source_url) IS NOT NULL
+      AND COALESCE(dh.page_url, f.source_url) != '';
   `,
 };
 

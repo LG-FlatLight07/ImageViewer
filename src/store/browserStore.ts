@@ -4,8 +4,12 @@ export const DEFAULT_URL = 'https://www.google.com';
 
 export type BrowserTab = {
   id: string;
+  /** The URI passed to WebView's `source` prop — only changes on an explicit navigation (address bar submit, home url, jump-to-source). Not updated by in-page link clicks. */
   url: string;
+  /** Address bar text — also the user's live edit buffer while typing, so it must NOT be treated as "the current page's URL". */
   inputValue: string;
+  /** The actual page currently displayed, kept in sync from every `onNavigationStateChange` (including in-page/SPA navigation). This is the correct source for history/bookmarks/downloads. */
+  currentUrl: string;
   title: string;
   canGoBack: boolean;
   canGoForward: boolean;
@@ -20,6 +24,7 @@ function createTab(url: string = DEFAULT_URL): BrowserTab {
     id: `tab-${Date.now()}-${tabIdCounter}`,
     url,
     inputValue: url,
+    currentUrl: url,
     title: '',
     canGoBack: false,
     canGoForward: false,
@@ -41,7 +46,12 @@ type BrowserState = {
   setActiveTabId: (id: string) => void;
   setUrl: (url: string) => void;
   setInputValue: (value: string) => void;
-  setNavigationState: (state: { canGoBack: boolean; canGoForward: boolean; title: string }) => void;
+  setNavigationState: (state: {
+    canGoBack: boolean;
+    canGoForward: boolean;
+    title: string;
+    currentUrl: string;
+  }) => void;
   setLoading: (loading: boolean) => void;
   /**
    * The very first tab is created at module load time, before the
@@ -85,7 +95,7 @@ export const useBrowserStore = create<BrowserState>((set) => ({
 
   setUrl: (url) =>
     set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url }),
+      tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url, currentUrl: url }),
     })),
 
   setInputValue: (inputValue) =>
@@ -93,9 +103,14 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       tabs: updateTab(state.tabs, state.activeTabId, { inputValue }),
     })),
 
-  setNavigationState: ({ canGoBack, canGoForward, title }) =>
+  setNavigationState: ({ canGoBack, canGoForward, title, currentUrl }) =>
     set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { canGoBack, canGoForward, title }),
+      tabs: updateTab(state.tabs, state.activeTabId, {
+        canGoBack,
+        canGoForward,
+        title,
+        currentUrl,
+      }),
     })),
 
   setLoading: (loading) =>
@@ -117,7 +132,11 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       }
       return {
         homeUrlApplied: true,
-        tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url }),
+        tabs: updateTab(state.tabs, state.activeTabId, {
+          url,
+          inputValue: url,
+          currentUrl: url,
+        }),
       };
     }),
 }));

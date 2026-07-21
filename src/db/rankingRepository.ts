@@ -8,8 +8,6 @@ export type RankingEntry = {
   displayName: string;
   /** First-image thumbnail cached at download time, when available. */
   thumbnailUri: string | null;
-  /** dirPath of the most recent download — fallback thumbnail source for pre-migration folders with no cached thumbnailUri. */
-  dirPath: string | null;
   totalImages: number;
   downloadCount: number;
   lastDownloadedAt: number;
@@ -53,65 +51,54 @@ function normalizeUrlKey(url: string): string {
   }
 }
 
-type FolderRow = {
-  source_url: string;
+type StatsRow = {
+  page_url: string;
+  page_title: string;
+  thumbnail_uri: string | null;
   image_count: number;
   created_at: number;
-  name: string;
-  dir_path: string | null;
-  thumbnail_uri: string | null;
 };
 
 type RankingGroup = {
   sourceUrl: string;
   displayName: string;
   thumbnailUri: string | null;
-  dirPath: string | null;
   totalImages: number;
   downloadCount: number;
   lastDownloadedAt: number;
 };
 
 /**
- * Ranking is computed from this device's own data only — the app has no
- * backend today. `download_history` is the authoritative source for the URL
- * and title actually used to download each folder's images (recorded once,
- * atomically, right after the download completes); `folders.source_url`/
- * `folders.name` are a COALESCE fallback for folders downloaded before this
- * table existed. Grouping happens in JS (rather than SQL GROUP BY) because
- * the group key is a normalized URL, not the raw column value.
+ * Ranking is sourced entirely from `ranking_stats` — an append-only ledger of
+ * every completed download, independent of the `folders` table (deleting a
+ * folder must not erase its ranking contribution) and, longer-term, meant to
+ * be swappable for a real backend shared across all app users without this
+ * function's contract changing. Grouping happens in JS (rather than SQL
+ * GROUP BY) because the group key is a normalized URL, not the raw column
+ * value.
  */
 export async function getDownloadRanking(
   db: SQLiteDatabase,
   period: RankingPeriod,
 ): Promise<RankingEntry[]> {
   const cutoff = periodCutoff(period);
-  const rows = await db.getAllAsync<FolderRow>(
-    `SELECT COALESCE(dh.page_url, f.source_url) as source_url,
-            f.image_count,
-            f.created_at,
-            COALESCE(dh.page_title, f.name) as name,
-            f.dir_path,
-            dh.first_image_uri as thumbnail_uri
-     FROM folders f
-     LEFT JOIN download_history dh ON dh.folder_id = f.id
-     WHERE COALESCE(dh.page_url, f.source_url) IS NOT NULL
-       AND COALESCE(dh.page_url, f.source_url) != ''
-       AND (? IS NULL OR f.created_at >= ?)`,
+  const rows = await db.getAllAsync<StatsRow>(
+    `SELECT page_url, page_title, thumbnail_uri, image_count, created_at
+     FROM ranking_stats
+     WHERE (? IS NULL OR created_at >= ?)`,
     cutoff,
     cutoff,
   );
 
   const groups = new Map<string, RankingGroup>();
   for (const row of rows) {
-    const key = normalizeUrlKey(row.source_url);
+    const key = normalizeUrlKey(row.page_url);
     const existing = groups.get(key);
     if (!existing) {
       groups.set(key, {
-        sourceUrl: row.source_url,
-        displayName: row.name,
+        sourceUrl: row.page_url,
+        displayName: row.page_title,
         thumbnailUri: row.thumbnail_uri,
-        dirPath: row.dir_path,
         totalImages: row.image_count,
         downloadCount: 1,
         lastDownloadedAt: row.created_at,
@@ -122,10 +109,9 @@ export async function getDownloadRanking(
     existing.downloadCount += 1;
     if (row.created_at >= existing.lastDownloadedAt) {
       existing.lastDownloadedAt = row.created_at;
-      existing.sourceUrl = row.source_url;
-      existing.displayName = row.name;
+      existing.sourceUrl = row.page_url;
+      existing.displayName = row.page_title;
       existing.thumbnailUri = row.thumbnail_uri;
-      existing.dirPath = row.dir_path;
     }
   }
 

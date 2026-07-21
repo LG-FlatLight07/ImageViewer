@@ -20,7 +20,6 @@ import {
   type RankingEntry,
   type RankingPeriod,
 } from '../../db/rankingRepository';
-import { listFolderImageUris } from '../../db/folderImages';
 import { useBrowserStore } from '../../store/browserStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
@@ -189,26 +188,7 @@ function RankingRow({
   onPress: () => void;
 }) {
   const { colors } = useAppTheme();
-  // entry.thumbnailUri is the cached first-image from download_history and
-  // covers all post-migration downloads; the dirPath lookup below is only a
-  // fallback for older folders downloaded before that cache existed.
-  const [fallbackThumbnailUri, setFallbackThumbnailUri] = useState<string | null>(null);
-  const thumbnailUri = entry.thumbnailUri ?? fallbackThumbnailUri;
-
-  useEffect(() => {
-    if (entry.thumbnailUri) {
-      return;
-    }
-    let cancelled = false;
-    listFolderImageUris({ dirPath: entry.dirPath }).then((uris) => {
-      if (!cancelled) {
-        setFallbackThumbnailUri(uris[0] ?? null);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.dirPath, entry.thumbnailUri]);
+  const thumbnailUri = entry.thumbnailUri;
 
   return (
     <TouchableOpacity style={[styles.row, { borderBottomColor: colors.border }]} onPress={onPress}>

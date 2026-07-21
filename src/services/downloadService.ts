@@ -132,6 +132,7 @@ export async function downloadImagesToNewFolder(
     pageUrl: options.sourceUrl,
     pageTitle: options.folderName,
     firstImageUri,
+    imageCount: successCount,
   });
 
   return { folderId: folder.id, successCount, failureCount: total - successCount };
