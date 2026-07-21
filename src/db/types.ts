@@ -11,6 +11,7 @@ export type Folder = {
   sourceUrl: string | null;
   createdAt: number;
   viewCount: number;
+  imageCount: number;
 };
 
 export type FolderWithTags = Folder & {

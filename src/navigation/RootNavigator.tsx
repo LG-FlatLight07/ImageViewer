@@ -9,6 +9,7 @@ import { BrowserNavigator } from './BrowserNavigator';
 import { ImageSelectionScreen } from '../screens/Browser/ImageSelectionScreen';
 import { GalleryNavigator } from './GalleryNavigator';
 import { FolderPickerScreen } from '../screens/Gallery/FolderPickerScreen';
+import { RankingScreen } from '../screens/Ranking/RankingScreen';
 import { SettingsScreen } from '../screens/Settings/SettingsScreen';
 import { AppGuideScreen } from '../screens/Settings/AppGuideScreen';
 import { useAppTheme } from '../theme/theme';
@@ -36,6 +37,16 @@ function MainTabs() {
           title: 'ギャラリー',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="images-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Ranking"
+        component={RankingScreen}
+        options={{
+          title: 'ランキング',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trophy-outline" size={size} color={color} />
           ),
         }}
       />

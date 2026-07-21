@@ -11,6 +11,7 @@ type FolderRow = {
   source_url: string | null;
   created_at: number;
   view_count: number;
+  image_count: number;
 };
 
 type TagRow = {
@@ -27,6 +28,7 @@ function mapFolderRow(row: FolderRow): Folder {
     sourceUrl: row.source_url,
     createdAt: row.created_at,
     viewCount: row.view_count,
+    imageCount: row.image_count,
   };
 }
 
@@ -59,18 +61,21 @@ export async function createFolder(
     parentId: string | null;
     dirPath: string | null;
     sourceUrl?: string | null;
+    imageCount?: number;
   },
 ): Promise<Folder> {
   const id = Crypto.randomUUID();
   const createdAt = Date.now();
+  const imageCount = input.imageCount ?? 0;
   await db.runAsync(
-    'INSERT INTO folders (id, name, parent_id, dir_path, source_url, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO folders (id, name, parent_id, dir_path, source_url, created_at, image_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
     input.name,
     input.parentId,
     input.dirPath,
     input.sourceUrl ?? null,
     createdAt,
+    imageCount,
   );
   return {
     id,
@@ -80,6 +85,7 @@ export async function createFolder(
     sourceUrl: input.sourceUrl ?? null,
     createdAt,
     viewCount: 0,
+    imageCount,
   };
 }
 

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -50,6 +50,11 @@ const MIGRATIONS: Record<number, string> = {
   `,
   3: `
     ALTER TABLE folders ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;
+  `,
+  4: `
+    ALTER TABLE folders ADD COLUMN image_count INTEGER NOT NULL DEFAULT 0;
+
+    CREATE INDEX IF NOT EXISTS idx_folders_source_url ON folders(source_url);
   `,
 };
 
