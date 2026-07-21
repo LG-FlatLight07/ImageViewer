@@ -77,6 +77,13 @@ export function ImageViewerScreen() {
     navigation.goBack();
   }, [navigation]);
 
+  // A perpendicular swipe (relative to the paging direction) dismisses back
+  // to the gallery root rather than the folder's image list, since it reads
+  // as "leave the viewer entirely" rather than "go back one screen".
+  const dismissToGallery = useCallback(() => {
+    navigation.popToTop();
+  }, [navigation]);
+
   const setIndex = useCallback((index: number) => {
     setCurrentIndex(index);
   }, []);
@@ -111,7 +118,7 @@ export function ImageViewerScreen() {
         const sign = translateCross.value >= 0 ? 1 : -1;
         translateCross.value = withTiming(sign * pageSize, { duration: 200 }, (finished) => {
           if (finished) {
-            runOnJS(closeViewer)();
+            runOnJS(dismissToGallery)();
           }
         });
         return;

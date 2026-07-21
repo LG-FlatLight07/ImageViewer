@@ -24,7 +24,9 @@ import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
+import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore } from '../../store/browserStore';
+import { useLayoutStore } from '../../store/layoutStore';
 import { useAppTheme } from '../../theme/theme';
 
 const SEARCH_SCREEN_ID = 'gallery.folderList.search';
@@ -44,6 +46,8 @@ export function FolderListScreen() {
   const rootNavigation = useRootNavigation();
   const setBrowserUrl = useBrowserStore((state) => state.setUrl);
   const { colors } = useAppTheme();
+  const searchAnchor = useLayoutStore((state) => state.layouts[SEARCH_SCREEN_ID]?.anchor);
+  const searchAtBottom = searchAnchor === EDGE_BOTTOM_ANCHOR;
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
@@ -51,7 +55,7 @@ export function FolderListScreen() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [folders, setFolders] = useState<FolderWithTags[]>([]);
   const [allTagNames, setAllTagNames] = useState<string[]>([]);
-  const [listPaddingTop, setListPaddingTop] = useState(MIN_LIST_PADDING_TOP);
+  const [searchBarHeight, setSearchBarHeight] = useState(0);
   const [menuFolder, setMenuFolder] = useState<FolderWithTags | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [taggingFolder, setTaggingFolder] = useState<FolderWithTags | null>(null);
@@ -124,7 +128,12 @@ export function FolderListScreen() {
       <DraggableLayoutArea>
         <FlatList
           style={styles.list}
-          contentContainerStyle={[styles.listContent, { paddingTop: listPaddingTop }]}
+          contentContainerStyle={[
+            styles.listContent,
+            searchAtBottom
+              ? { paddingTop: 12, paddingBottom: Math.max(searchBarHeight + 20, 24) }
+              : { paddingTop: Math.max(searchBarHeight + 20, MIN_LIST_PADDING_TOP) },
+          ]}
           data={folders}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
@@ -147,9 +156,8 @@ export function FolderListScreen() {
           screenId={SEARCH_SCREEN_ID}
           variant="bar"
           defaultAnchor="top"
-          onMeasured={(size) =>
-            setListPaddingTop(size.height > 0 ? size.height + 20 : MIN_LIST_PADDING_TOP)
-          }
+          edgesOnly
+          onMeasured={(size) => setSearchBarHeight(size.height)}
         >
           <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
             <Ionicons name="search" size={16} color={colors.secondaryText} />

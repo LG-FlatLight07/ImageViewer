@@ -19,7 +19,17 @@ const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 function MainTabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
+    <Tab.Navigator initialRouteName="Browser" screenOptions={{ headerShown: false }}>
+      <Tab.Screen
+        name="Ranking"
+        component={RankingScreen}
+        options={{
+          title: 'ランキング',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trophy-outline" size={size} color={color} />
+          ),
+        }}
+      />
       <Tab.Screen
         name="Browser"
         component={BrowserNavigator}
@@ -37,16 +47,6 @@ function MainTabs() {
           title: 'ギャラリー',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="images-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Ranking"
-        component={RankingScreen}
-        options={{
-          title: 'ランキング',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" size={size} color={color} />
           ),
         }}
       />

@@ -9,6 +9,16 @@ export type Anchor = number;
 
 export const ANCHOR_COUNT = 32;
 
+/**
+ * The only two anchors a `edgesOnly` bar (full-width, docked flush to the
+ * top or bottom edge) is allowed to use. Valid because a full-width bar's
+ * `availableW` is always ~0, so every anchor already collapses onto the
+ * single vertical line at x=margin — these two indices are simply its
+ * extreme top and extreme bottom points on that line.
+ */
+export const EDGE_TOP_ANCHOR: Anchor = 0;
+export const EDGE_BOTTOM_ANCHOR: Anchor = ANCHOR_COUNT / 2;
+
 export type SemanticAnchor =
   'top' | 'bottom' | 'left' | 'right' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 
@@ -112,4 +122,16 @@ export function resolveSemanticAnchor(
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function circularDistance(a: Anchor, b: Anchor): number {
+  const diff = Math.abs(normalizeIndex(a) - normalizeIndex(b));
+  return Math.min(diff, ANCHOR_COUNT - diff);
+}
+
+/** Snaps any anchor to whichever of the two edge anchors is circularly nearest. */
+export function clampToEdgeAnchor(anchor: Anchor): Anchor {
+  return circularDistance(anchor, EDGE_TOP_ANCHOR) <= circularDistance(anchor, EDGE_BOTTOM_ANCHOR)
+    ? EDGE_TOP_ANCHOR
+    : EDGE_BOTTOM_ANCHOR;
 }

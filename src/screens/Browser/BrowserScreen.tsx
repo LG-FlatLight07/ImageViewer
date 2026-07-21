@@ -11,7 +11,9 @@ import { URLBar } from '../../components/URLBar';
 import { BrowserTabBar } from '../../components/BrowserTabBar';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
+import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore, useActiveBrowserTab } from '../../store/browserStore';
+import { useLayoutStore } from '../../store/layoutStore';
 import { SEARCH_ENGINES, useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
@@ -24,6 +26,7 @@ import { useAppTheme } from '../../theme/theme';
 
 const BUTTONS_SCREEN_ID = 'browser.buttons';
 const CHROME_SCREEN_ID = 'browser.chrome';
+const CHROME_GAP = 12;
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
@@ -46,8 +49,11 @@ export function BrowserScreen() {
     setActiveTabId,
   } = useBrowserStore();
   const { url, inputValue, title, canGoBack, canGoForward, loading } = activeTab;
+  const chromeAnchor = useLayoutStore((state) => state.layouts[CHROME_SCREEN_ID]?.anchor);
+  const chromeAtBottom = chromeAnchor === EDGE_BOTTOM_ANCHOR;
 
   const [bookmarked, setBookmarked] = useState(false);
+  const [chromeHeight, setChromeHeight] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +66,24 @@ export function BrowserScreen() {
       cancelled = true;
     };
   }, [db, url]);
+
+  useEffect(() => {
+    const applyHomeUrl = () => {
+      const engine = SEARCH_ENGINES.find((e) => e.key === useSettingsStore.getState().searchEngine);
+      if (engine) {
+        useBrowserStore.getState().applyHomeUrlIfPristine(engine.homeUrl);
+      }
+    };
+    if (useSettingsStore.persist.hasHydrated()) {
+      applyHomeUrl();
+      return;
+    }
+    const unsubscribe = useSettingsStore.persist.onFinishHydration(() => {
+      applyHomeUrl();
+      unsubscribe();
+    });
+    return unsubscribe;
+  }, []);
 
   const handleSubmit = () => {
     const resolved = resolveInputToUrl(inputValue, searchEngine);
@@ -114,6 +138,32 @@ export function BrowserScreen() {
     });
   };
 
+  const urlBarElement = (
+    <URLBar
+      key="url-bar"
+      value={inputValue}
+      loading={loading}
+      bookmarked={bookmarked}
+      onChangeValue={setInputValue}
+      onSubmit={handleSubmit}
+      onReload={() => (loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload())}
+      onToggleBookmark={handleToggleBookmark}
+      onOpenBookmarks={() => navigation.navigate('Bookmarks')}
+      onOpenHistory={() => navigation.navigate('History')}
+    />
+  );
+
+  const tabBarElement = (
+    <BrowserTabBar
+      key="tab-bar"
+      tabs={tabs}
+      activeTabId={activeTabId}
+      onSelectTab={setActiveTabId}
+      onCloseTab={closeTab}
+      onNewTab={handleNewTab}
+    />
+  );
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -124,7 +174,12 @@ export function BrowserScreen() {
           key={activeTabId}
           ref={webViewRef}
           source={{ uri: url }}
-          style={styles.webview}
+          style={[
+            styles.webview,
+            chromeAtBottom
+              ? { marginBottom: chromeHeight + CHROME_GAP }
+              : { marginTop: chromeHeight + CHROME_GAP },
+          ]}
           onNavigationStateChange={handleNavigationStateChange}
           onMessage={handleMessage}
           startInLoadingState
@@ -160,27 +215,24 @@ export function BrowserScreen() {
           </TouchableOpacity>
         </ControlGroup>
 
-        <ControlGroup screenId={CHROME_SCREEN_ID} variant="bar" defaultAnchor="top">
-          <URLBar
-            value={inputValue}
-            loading={loading}
-            bookmarked={bookmarked}
-            onChangeValue={setInputValue}
-            onSubmit={handleSubmit}
-            onReload={() =>
-              loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload()
-            }
-            onToggleBookmark={handleToggleBookmark}
-            onOpenBookmarks={() => navigation.navigate('Bookmarks')}
-            onOpenHistory={() => navigation.navigate('History')}
-          />
-          <BrowserTabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={setActiveTabId}
-            onCloseTab={closeTab}
-            onNewTab={handleNewTab}
-          />
+        <ControlGroup
+          screenId={CHROME_SCREEN_ID}
+          variant="bar"
+          defaultAnchor="top"
+          edgesOnly
+          onMeasured={(size) => setChromeHeight(size.height)}
+        >
+          {chromeAtBottom ? (
+            <>
+              {tabBarElement}
+              {urlBarElement}
+            </>
+          ) : (
+            <>
+              {urlBarElement}
+              {tabBarElement}
+            </>
+          )}
         </ControlGroup>
       </DraggableLayoutArea>
     </SafeAreaView>

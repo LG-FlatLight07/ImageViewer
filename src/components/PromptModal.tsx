@@ -17,6 +17,7 @@ type PromptModalProps = {
   placeholder?: string;
   initialValue?: string;
   submitLabel?: string;
+  multiline?: boolean;
   onCancel: () => void;
   onSubmit: (value: string) => void;
 };
@@ -27,6 +28,7 @@ export function PromptModal({
   placeholder,
   initialValue = '',
   submitLabel = 'OK',
+  multiline = false,
   onCancel,
   onSubmit,
 }: PromptModalProps) {
@@ -51,12 +53,18 @@ export function PromptModal({
         >
           <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
           <TextInput
-            style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+            style={[
+              styles.input,
+              multiline && styles.inputMultiline,
+              { borderColor: colors.border, color: colors.text },
+            ]}
             value={value}
             onChangeText={setValue}
             placeholder={placeholder}
             placeholderTextColor={colors.secondaryText}
             autoFocus
+            multiline={multiline}
+            textAlignVertical={multiline ? 'top' : 'center'}
           />
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={onCancel}>
@@ -98,6 +106,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 15,
+  },
+  inputMultiline: {
+    height: 120,
   },
   buttonRow: {
     flexDirection: 'row',

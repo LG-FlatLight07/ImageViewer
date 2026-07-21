@@ -2,7 +2,9 @@ import { Directory, File } from 'expo-file-system';
 
 import type { Folder } from './types';
 
-export async function listFolderImageUris(folder: Folder | null): Promise<string[]> {
+export async function listFolderImageUris(
+  folder: Pick<Folder, 'dirPath'> | null,
+): Promise<string[]> {
   if (!folder?.dirPath) {
     return [];
   }

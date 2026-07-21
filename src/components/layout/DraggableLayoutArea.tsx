@@ -12,10 +12,12 @@ export function useDraggableBounds(): Bounds {
   return useContext(BoundsContext);
 }
 
+export type RegisteredRect = Rect & { variant: 'buttons' | 'bar' };
+
 type Registry = {
-  register: (id: string, rect: Rect) => void;
+  register: (id: string, rect: RegisteredRect) => void;
   unregister: (id: string) => void;
-  getOthers: (excludeId: string) => Rect[];
+  getOthers: (excludeId: string) => RegisteredRect[];
 };
 
 const RegistryContext = createContext<Registry | null>(null);
@@ -32,7 +34,7 @@ export function useControlGroupRegistry(): Registry {
 export function DraggableLayoutArea({ children }: { children: React.ReactNode }) {
   const [bounds, setBounds] = useState<Bounds>({ width: 0, height: 0 });
   const editMode = useLayoutStore((state) => state.editMode);
-  const rectsRef = useRef<Map<string, Rect>>(new Map());
+  const rectsRef = useRef<Map<string, RegisteredRect>>(new Map());
 
   const registry = useMemo<Registry>(
     () => ({

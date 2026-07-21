@@ -11,8 +11,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useSQLiteContext } from 'expo-sqlite';
 
 import { useRootNavigation } from '../../navigation/useRootNavigation';
+import { submitFeedbackMessage } from '../../db/feedbackRepository';
+import { PromptModal } from '../../components/PromptModal';
 import { useLayoutStore } from '../../store/layoutStore';
 import {
   SEARCH_ENGINES,
@@ -35,6 +38,7 @@ const VIEWER_DIRECTION_OPTIONS: { key: ImageViewerDirection; label: string }[] =
 
 export function SettingsScreen() {
   const { colors } = useAppTheme();
+  const db = useSQLiteContext();
   const rootNavigation = useRootNavigation();
   const editMode = useLayoutStore((state) => state.editMode);
   const setEditMode = useLayoutStore((state) => state.setEditMode);
@@ -51,6 +55,7 @@ export function SettingsScreen() {
   const addFolderNameExclusion = useSettingsStore((state) => state.addFolderNameExclusion);
   const removeFolderNameExclusion = useSettingsStore((state) => state.removeFolderNameExclusion);
   const [exclusionInput, setExclusionInput] = useState('');
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
   const commitExclusion = () => {
     if (exclusionInput.trim()) {
@@ -237,6 +242,21 @@ export function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          サポート
+        </Text>
+        <TouchableOpacity
+          style={[styles.guideLink, { backgroundColor: colors.surface }]}
+          onPress={() => setFeedbackVisible(true)}
+          accessibilityLabel="open-feedback"
+        >
+          <Ionicons name="mail-outline" size={18} color={colors.text} />
+          <Text style={[styles.guideLinkText, { color: colors.text }]}>
+            開発者にメッセージを送る
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+        </TouchableOpacity>
+
         <View style={styles.guideDivider} />
         <TouchableOpacity
           style={[styles.guideLink, { backgroundColor: colors.surface }]}
@@ -250,6 +270,25 @@ export function SettingsScreen() {
           <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
         </TouchableOpacity>
       </ScrollView>
+
+      <PromptModal
+        visible={feedbackVisible}
+        title="開発者にメッセージを送る"
+        placeholder="ご意見・不具合報告などをご記入ください"
+        submitLabel="送信"
+        multiline
+        onCancel={() => setFeedbackVisible(false)}
+        onSubmit={async (value) => {
+          setFeedbackVisible(false);
+          if (value.trim()) {
+            await submitFeedbackMessage(db, value);
+            Alert.alert(
+              'メッセージを保存しました',
+              '現在サーバーがないため端末内に保存されます。送信機能の追加後にまとめて送信される予定です。',
+            );
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

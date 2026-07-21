@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,10 @@ import { useAppTheme } from '../../theme/theme';
 import { useControlGroupRegistry, useDraggableBounds } from './DraggableLayoutArea';
 import {
   anchorsByDistance,
+  clampToEdgeAnchor,
   DEFAULT_ARRANGEMENT,
+  EDGE_BOTTOM_ANCHOR,
+  EDGE_TOP_ANCHOR,
   getAnchorOrigin,
   rectsOverlap,
   resolveSemanticAnchor,
@@ -33,6 +36,11 @@ type ControlGroupProps = {
   variant?: 'buttons' | 'bar';
   /** Compass position used the first time this screenId has no saved layout yet. */
   defaultAnchor?: SemanticAnchor;
+  /**
+   * Restricts a 'bar' variant to only the extreme top or extreme bottom edge
+   * (no intermediate positions). Meaningless for 'buttons' groups.
+   */
+  edgesOnly?: boolean;
   /** Fires whenever this group's rendered size changes (e.g. so a screen can reserve scroll-content space for it). */
   onMeasured?: (size: Size) => void;
 };
@@ -42,6 +50,7 @@ export function ControlGroup({
   children,
   variant = 'buttons',
   defaultAnchor = 'bottomRight',
+  edgesOnly = false,
   onMeasured,
 }: ControlGroupProps) {
   const { colors } = useAppTheme();
@@ -57,18 +66,27 @@ export function ControlGroup({
   const isBar = variant === 'bar';
   const barWidth = bounds.width > 0 ? Math.max(bounds.width - MARGIN * 2, 0) : size.width;
   const effectiveSize = isBar ? { width: barWidth, height: size.height } : size;
+  const effectiveWidth = effectiveSize.width;
+  const effectiveHeight = effectiveSize.height;
   const arrangement = storedLayout?.arrangement ?? DEFAULT_ARRANGEMENT;
-  const anchor =
+  const rawAnchor =
     storedLayout?.anchor ?? resolveSemanticAnchor(defaultAnchor, bounds, effectiveSize, MARGIN);
+  const anchor = edgesOnly ? clampToEdgeAnchor(rawAnchor) : rawAnchor;
 
   const origin = getAnchorOrigin(anchor, bounds, effectiveSize, MARGIN);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
+  const lastMeasuredRef = useRef<Size>({ width: 0, height: 0 });
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
+    const width = Math.round(event.nativeEvent.layout.width);
+    const height = Math.round(event.nativeEvent.layout.height);
+    if (lastMeasuredRef.current.width === width && lastMeasuredRef.current.height === height) {
+      return;
+    }
+    lastMeasuredRef.current = { width, height };
     setSize({ width, height });
     onMeasured?.({ width, height });
   };
@@ -82,16 +100,68 @@ export function ControlGroup({
       y: origin.y,
       width: effectiveSize.width,
       height: effectiveSize.height,
+      variant,
     });
     return () => registry.unregister(screenId);
   }, [
     registry,
     screenId,
+    variant,
     origin.x,
     origin.y,
     effectiveSize.width,
     effectiveSize.height,
     bounds.width,
+  ]);
+
+  // If this (non-bar) group ends up overlapping a bar-variant sibling — most
+  // commonly because the bar grew after we were placed, e.g. tag suggestions
+  // expanding a search bar — relocate ourselves to the nearest free anchor.
+  // Bars stay put (their position is deliberately edge-locked); buttons
+  // groups are the ones expected to step out of the way.
+  const lastAvoidKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (variant !== 'buttons' || dragging || bounds.width === 0 || effectiveWidth === 0) {
+      return;
+    }
+    const size = { width: effectiveWidth, height: effectiveHeight };
+    const rect = { x: origin.x, y: origin.y, ...size };
+    const barOverlaps = registry
+      .getOthers(screenId)
+      .filter((other) => other.variant === 'bar' && rectsOverlap(rect, other));
+    if (barOverlaps.length === 0) {
+      lastAvoidKeyRef.current = null;
+      return;
+    }
+    const key = `${anchor}:${barOverlaps.map((o) => `${o.x},${o.y},${o.width},${o.height}`).join('|')}`;
+    if (lastAvoidKeyRef.current === key) {
+      return;
+    }
+    lastAvoidKeyRef.current = key;
+    const center = { x: origin.x + size.width / 2, y: origin.y + size.height / 2 };
+    const others = registry.getOthers(screenId);
+    const free = anchorsByDistance(center, bounds, size, MARGIN)
+      .filter((candidate) => candidate !== anchor)
+      .find((candidate) => {
+        const candidateOrigin = getAnchorOrigin(candidate, bounds, size, MARGIN);
+        const rect2 = { x: candidateOrigin.x, y: candidateOrigin.y, ...size };
+        return !others.some((other) => rectsOverlap(rect2, other));
+      });
+    if (free !== undefined) {
+      setAnchor(screenId, free);
+    }
+  }, [
+    variant,
+    dragging,
+    bounds,
+    origin.x,
+    origin.y,
+    effectiveWidth,
+    effectiveHeight,
+    anchor,
+    registry,
+    screenId,
+    setAnchor,
   ]);
 
   const commitDrop = (dx: number, dy: number) => {
@@ -105,7 +175,10 @@ export function ControlGroup({
       x: origin.x + effectiveSize.width / 2 + dx,
       y: origin.y + effectiveSize.height / 2 + dy,
     };
-    const candidates = anchorsByDistance(target, bounds, effectiveSize, MARGIN);
+    const allCandidates = anchorsByDistance(target, bounds, effectiveSize, MARGIN);
+    const candidates = edgesOnly
+      ? allCandidates.filter((a) => a === EDGE_TOP_ANCHOR || a === EDGE_BOTTOM_ANCHOR)
+      : allCandidates;
     const others = registry.getOthers(screenId);
     const nonOverlapping = candidates.find((candidate) => {
       const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, MARGIN);
@@ -188,6 +261,7 @@ export function ControlGroup({
             size={effectiveSize}
             current={anchor}
             activeColor={colors.primary}
+            allowed={edgesOnly ? [EDGE_TOP_ANCHOR, EDGE_BOTTOM_ANCHOR] : undefined}
           />
         </View>
       )}
@@ -200,30 +274,34 @@ function AnchorTargets({
   size,
   current,
   activeColor,
+  allowed,
 }: {
   bounds: Size;
   size: Size;
   current: Anchor;
   activeColor: string;
+  allowed?: Anchor[];
 }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {Array.from({ length: 32 }, (_, index) => {
-        const target = getAnchorOrigin(index, bounds, size, MARGIN);
-        return (
-          <View
-            key={index}
-            style={[
-              styles.targetDot,
-              {
-                left: target.x + size.width / 2 - 5,
-                top: target.y + size.height / 2 - 5,
-              },
-              index === current && { backgroundColor: activeColor },
-            ]}
-          />
-        );
-      })}
+      {Array.from({ length: 32 }, (_, index) => index)
+        .filter((index) => !allowed || allowed.includes(index))
+        .map((index) => {
+          const target = getAnchorOrigin(index, bounds, size, MARGIN);
+          return (
+            <View
+              key={index}
+              style={[
+                styles.targetDot,
+                {
+                  left: target.x + size.width / 2 - 5,
+                  top: target.y + size.height / 2 - 5,
+                },
+                index === current && { backgroundColor: activeColor },
+              ]}
+            />
+          );
+        })}
     </View>
   );
 }

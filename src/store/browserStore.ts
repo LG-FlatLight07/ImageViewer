@@ -34,6 +34,8 @@ function updateTab(tabs: BrowserTab[], id: string, patch: Partial<BrowserTab>): 
 type BrowserState = {
   tabs: BrowserTab[];
   activeTabId: string;
+  /** True once `applyHomeUrlIfPristine` has run (or been skipped as unnecessary) for this app launch. */
+  homeUrlApplied: boolean;
   openTab: (url?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string) => void;
@@ -41,6 +43,14 @@ type BrowserState = {
   setInputValue: (value: string) => void;
   setNavigationState: (state: { canGoBack: boolean; canGoForward: boolean; title: string }) => void;
   setLoading: (loading: boolean) => void;
+  /**
+   * The very first tab is created at module load time, before the
+   * persisted search-engine setting has finished rehydrating, so it always
+   * starts on DEFAULT_URL. Call this once settings have rehydrated to swap
+   * the still-untouched initial tab over to the configured engine's home
+   * page; it's a no-op once the user has navigated anywhere.
+   */
+  applyHomeUrlIfPristine: (url: string) => void;
 };
 
 const initialTab = createTab();
@@ -48,6 +58,7 @@ const initialTab = createTab();
 export const useBrowserStore = create<BrowserState>((set) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
+  homeUrlApplied: false,
 
   openTab: (url = DEFAULT_URL) => {
     const tab = createTab(url);
@@ -91,6 +102,24 @@ export const useBrowserStore = create<BrowserState>((set) => ({
     set((state) => ({
       tabs: updateTab(state.tabs, state.activeTabId, { loading }),
     })),
+
+  applyHomeUrlIfPristine: (url) =>
+    set((state) => {
+      if (state.homeUrlApplied) {
+        return state;
+      }
+      const isPristine =
+        state.tabs.length === 1 &&
+        state.tabs[0].url === DEFAULT_URL &&
+        state.tabs[0].inputValue === DEFAULT_URL;
+      if (!isPristine || url === DEFAULT_URL) {
+        return { ...state, homeUrlApplied: true };
+      }
+      return {
+        homeUrlApplied: true,
+        tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url }),
+      };
+    }),
 }));
 
 export function useActiveBrowserTab(): BrowserTab {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,11 +47,19 @@ export function ImageSelectionScreen() {
   const selectAll = () => setSelectedIds(new Set(allImages.map((image) => image.id)));
   const clearAll = () => setSelectedIds(new Set());
 
+  // Guards against duplicate folders/ranking entries from a rapid double-tap
+  // firing this handler more than once before the screen unmounts.
+  const submittingRef = useRef(false);
+
   const handleDownload = () => {
+    if (submittingRef.current) {
+      return;
+    }
     const targets = allImages.filter((image) => selectedIds.has(image.id));
     if (targets.length === 0) {
       return;
     }
+    submittingRef.current = true;
     useDownloadStore.getState().start(targets.length);
     navigation.goBack();
     downloadImagesToNewFolder(db, {
