@@ -189,19 +189,26 @@ function RankingRow({
   onPress: () => void;
 }) {
   const { colors } = useAppTheme();
-  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  // entry.thumbnailUri is the cached first-image from download_history and
+  // covers all post-migration downloads; the dirPath lookup below is only a
+  // fallback for older folders downloaded before that cache existed.
+  const [fallbackThumbnailUri, setFallbackThumbnailUri] = useState<string | null>(null);
+  const thumbnailUri = entry.thumbnailUri ?? fallbackThumbnailUri;
 
   useEffect(() => {
+    if (entry.thumbnailUri) {
+      return;
+    }
     let cancelled = false;
     listFolderImageUris({ dirPath: entry.dirPath }).then((uris) => {
       if (!cancelled) {
-        setThumbnailUri(uris[0] ?? null);
+        setFallbackThumbnailUri(uris[0] ?? null);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [entry.dirPath]);
+  }, [entry.dirPath, entry.thumbnailUri]);
 
   return (
     <TouchableOpacity style={[styles.row, { borderBottomColor: colors.border }]} onPress={onPress}>
@@ -269,19 +276,18 @@ function MarqueeText({ text, textStyle }: { text: string; textStyle?: object }) 
       style={styles.marqueeClip}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
     >
-      {/* Invisible, unclipped, un-numberOfLines-limited clone used purely to
-          measure the text's true natural width — decoupled from the visible
-          copy below so numberOfLines/flex quirks on that copy can't distort
-          the overflow measurement. */}
-      <Text
-        style={[textStyle, styles.marqueeMeasure]}
+      {/* alignSelf: 'flex-start' keeps this View hugging the text's natural
+          (unwrapped) width instead of stretching to the clip container's
+          width, so onLayout reports the true content width to compare
+          against containerWidth. */}
+      <Animated.View
+        style={[styles.marqueeInner, animatedStyle]}
         onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
       >
-        {text}
-      </Text>
-      <Animated.Text style={[textStyle, styles.marqueeText, animatedStyle]} numberOfLines={1}>
-        {text}
-      </Animated.Text>
+        <Text style={textStyle} numberOfLines={1}>
+          {text}
+        </Text>
+      </Animated.View>
     </View>
   );
 }
@@ -336,14 +342,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   marqueeClip: {
+    width: '100%',
     overflow: 'hidden',
   },
-  marqueeText: {
+  marqueeInner: {
     alignSelf: 'flex-start',
-  },
-  marqueeMeasure: {
-    position: 'absolute',
-    opacity: 0,
   },
   rank: {
     width: 28,

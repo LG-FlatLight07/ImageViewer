@@ -55,7 +55,7 @@ export function FolderRow({
 
   const handleSwipeableWillOpen = () => {
     const close = () => swipeableRef.current?.close();
-    coordinator?.notifyOpen(close);
+    coordinator?.notifyOpen(folder.id, close);
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
     }

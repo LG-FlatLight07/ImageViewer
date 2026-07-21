@@ -58,6 +58,8 @@ export function SettingsScreen() {
   const setAutoSelectSequentialImages = useSettingsStore(
     (state) => state.setAutoSelectSequentialImages,
   );
+  const skipDeleteConfirmation = useSettingsStore((state) => state.skipDeleteConfirmation);
+  const setSkipDeleteConfirmation = useSettingsStore((state) => state.setSkipDeleteConfirmation);
   const imageViewerDirection = useSettingsStore((state) => state.imageViewerDirection);
   const setImageViewerDirection = useSettingsStore((state) => state.setImageViewerDirection);
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
@@ -190,6 +192,23 @@ export function SettingsScreen() {
             value={autoSelectSequentialImages}
             onValueChange={setAutoSelectSequentialImages}
             accessibilityLabel="toggle-auto-select-sequential-images"
+          />
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          ギャラリー
+        </Text>
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View style={styles.rowTextGroup}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>削除前に確認する</Text>
+            <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
+              オフにすると、フォルダ削除時に確認ポップアップを表示せず即座に削除します
+            </Text>
+          </View>
+          <Switch
+            value={!skipDeleteConfirmation}
+            onValueChange={(value) => setSkipDeleteConfirmation(!value)}
+            accessibilityLabel="toggle-delete-confirmation"
           />
         </View>
 

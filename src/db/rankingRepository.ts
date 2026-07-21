@@ -4,9 +4,11 @@ export type RankingPeriod = 'day' | 'week' | 'all';
 
 export type RankingEntry = {
   sourceUrl: string;
-  /** The folder name that was auto-generated at download time (most recent download for this URL). */
+  /** The page title recorded at download time (most recent download for this URL). */
   displayName: string;
-  /** dirPath of the most recent download, used to resolve a first-image thumbnail. */
+  /** First-image thumbnail cached at download time, when available. */
+  thumbnailUri: string | null;
+  /** dirPath of the most recent download — fallback thumbnail source for pre-migration folders with no cached thumbnailUri. */
   dirPath: string | null;
   totalImages: number;
   downloadCount: number;
@@ -57,11 +59,13 @@ type FolderRow = {
   created_at: number;
   name: string;
   dir_path: string | null;
+  thumbnail_uri: string | null;
 };
 
 type RankingGroup = {
   sourceUrl: string;
   displayName: string;
+  thumbnailUri: string | null;
   dirPath: string | null;
   totalImages: number;
   downloadCount: number;
@@ -69,11 +73,13 @@ type RankingGroup = {
 };
 
 /**
- * Ranking is computed from this device's own `folders` table only — the app
- * has no backend today. Grouping happens in JS (rather than SQL GROUP BY)
- * because the group key is a normalized URL, not the raw column value; once
- * a shared backend exists, the same normalization can run there against
- * synced records without changing this function's contract.
+ * Ranking is computed from this device's own data only — the app has no
+ * backend today. `download_history` is the authoritative source for the URL
+ * and title actually used to download each folder's images (recorded once,
+ * atomically, right after the download completes); `folders.source_url`/
+ * `folders.name` are a COALESCE fallback for folders downloaded before this
+ * table existed. Grouping happens in JS (rather than SQL GROUP BY) because
+ * the group key is a normalized URL, not the raw column value.
  */
 export async function getDownloadRanking(
   db: SQLiteDatabase,
@@ -81,11 +87,17 @@ export async function getDownloadRanking(
 ): Promise<RankingEntry[]> {
   const cutoff = periodCutoff(period);
   const rows = await db.getAllAsync<FolderRow>(
-    `SELECT source_url, image_count, created_at, name, dir_path
-     FROM folders
-     WHERE source_url IS NOT NULL
-       AND source_url != ''
-       AND (? IS NULL OR created_at >= ?)`,
+    `SELECT COALESCE(dh.page_url, f.source_url) as source_url,
+            f.image_count,
+            f.created_at,
+            COALESCE(dh.page_title, f.name) as name,
+            f.dir_path,
+            dh.first_image_uri as thumbnail_uri
+     FROM folders f
+     LEFT JOIN download_history dh ON dh.folder_id = f.id
+     WHERE COALESCE(dh.page_url, f.source_url) IS NOT NULL
+       AND COALESCE(dh.page_url, f.source_url) != ''
+       AND (? IS NULL OR f.created_at >= ?)`,
     cutoff,
     cutoff,
   );
@@ -98,6 +110,7 @@ export async function getDownloadRanking(
       groups.set(key, {
         sourceUrl: row.source_url,
         displayName: row.name,
+        thumbnailUri: row.thumbnail_uri,
         dirPath: row.dir_path,
         totalImages: row.image_count,
         downloadCount: 1,
@@ -111,6 +124,7 @@ export async function getDownloadRanking(
       existing.lastDownloadedAt = row.created_at;
       existing.sourceUrl = row.source_url;
       existing.displayName = row.name;
+      existing.thumbnailUri = row.thumbnail_uri;
       existing.dirPath = row.dir_path;
     }
   }

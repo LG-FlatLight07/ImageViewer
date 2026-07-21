@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { createFolder } from '../db/foldersRepository';
+import { recordDownloadHistory } from '../db/downloadHistoryRepository';
 
 const DOWNLOAD_CONCURRENCY = 4;
 const INVALID_FILENAME_CHARS = '/\\:*?"<>|';
@@ -52,10 +53,14 @@ async function downloadWithConcurrency(
   directory: Directory,
   concurrency: number,
   onEach: () => void,
-): Promise<number> {
+): Promise<{ successCount: number; firstImageUri: string | null }> {
   let successCount = 0;
   let nextIndex = 0;
   const digits = String(urls.length).length;
+  // Tracks the lowest-index successful download so the caller can cache a
+  // stable "first image" thumbnail regardless of concurrent completion order.
+  let firstSuccessIndex = -1;
+  let firstImageUri: string | null = null;
 
   async function worker() {
     for (;;) {
@@ -67,8 +72,13 @@ async function downloadWithConcurrency(
       const url = urls[index];
       const fileName = `${String(index + 1).padStart(digits, '0')}.${inferExtension(url)}`;
       try {
-        await File.downloadFileAsync(url, new File(directory, fileName), { idempotent: true });
+        const file = new File(directory, fileName);
+        await File.downloadFileAsync(url, file, { idempotent: true });
         successCount += 1;
+        if (firstSuccessIndex === -1 || index < firstSuccessIndex) {
+          firstSuccessIndex = index;
+          firstImageUri = file.uri;
+        }
       } catch {
         // skip failed downloads and continue with the rest of the batch
       } finally {
@@ -79,7 +89,7 @@ async function downloadWithConcurrency(
 
   const workers = Array.from({ length: Math.min(concurrency, urls.length) }, () => worker());
   await Promise.all(workers);
-  return successCount;
+  return { successCount, firstImageUri };
 }
 
 export async function downloadImagesToNewFolder(
@@ -98,7 +108,7 @@ export async function downloadImagesToNewFolder(
 
   const total = options.imageUrls.length;
   let completed = 0;
-  const successCount = await downloadWithConcurrency(
+  const { successCount, firstImageUri } = await downloadWithConcurrency(
     options.imageUrls,
     directory,
     DOWNLOAD_CONCURRENCY,
@@ -115,6 +125,13 @@ export async function downloadImagesToNewFolder(
     dirPath,
     sourceUrl: options.sourceUrl,
     imageCount: successCount,
+  });
+
+  await recordDownloadHistory(db, {
+    folderId: folder.id,
+    pageUrl: options.sourceUrl,
+    pageTitle: options.folderName,
+    firstImageUri,
   });
 
   return { folderId: folder.id, successCount, failureCount: total - successCount };

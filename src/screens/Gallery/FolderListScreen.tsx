@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -18,6 +18,7 @@ import {
   setFolderTags,
 } from '../../db/foldersRepository';
 import { deleteFolderFiles } from '../../db/folderImages';
+import { confirmDeleteFolder } from '../../utils/confirmDeleteFolder';
 import { FolderRow } from '../../components/FolderRow';
 import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
@@ -94,22 +95,11 @@ export function FolderListScreen() {
   };
 
   const handleDelete = (folder: FolderWithTags) => {
-    Alert.alert(
-      'フォルダを削除しますか?',
-      `「${folder.name}」を削除します。この操作は元に戻せません。`,
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteFolderFiles(folder);
-            await deleteFolder(db, folder.id);
-            reload();
-          },
-        },
-      ],
-    );
+    confirmDeleteFolder(folder.name, async () => {
+      await deleteFolderFiles(folder);
+      await deleteFolder(db, folder.id);
+      reload();
+    });
   };
 
   const handleJumpToSource = (folder: FolderWithTags) => {

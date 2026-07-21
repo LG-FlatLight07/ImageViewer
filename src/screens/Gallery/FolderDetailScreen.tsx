@@ -19,6 +19,7 @@ import {
   setFolderTags,
 } from '../../db/foldersRepository';
 import { deleteFolderFiles, deleteImageFiles, listFolderImageUris } from '../../db/folderImages';
+import { confirmDeleteFolder } from '../../utils/confirmDeleteFolder';
 import { FolderRow } from '../../components/FolderRow';
 import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
@@ -87,22 +88,11 @@ export function FolderDetailScreen() {
   );
 
   const handleDeleteSubfolder = (target: FolderWithTags) => {
-    Alert.alert(
-      'フォルダを削除しますか?',
-      `「${target.name}」を削除します。この操作は元に戻せません。`,
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteFolderFiles(target);
-            await deleteFolder(db, target.id);
-            reload();
-          },
-        },
-      ],
-    );
+    confirmDeleteFolder(target.name, async () => {
+      await deleteFolderFiles(target);
+      await deleteFolder(db, target.id);
+      reload();
+    });
   };
 
   const handleJumpToSource = (target: FolderWithTags) => {

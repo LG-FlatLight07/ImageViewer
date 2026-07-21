@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -63,6 +63,17 @@ const MIGRATIONS: Record<number, string> = {
       created_at INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending'
     );
+  `,
+  6: `
+    CREATE TABLE IF NOT EXISTS download_history (
+      folder_id TEXT PRIMARY KEY NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+      page_url TEXT NOT NULL,
+      page_title TEXT NOT NULL,
+      first_image_uri TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_download_history_page_url ON download_history(page_url);
   `,
 };
 

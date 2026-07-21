@@ -129,8 +129,12 @@ export async function listFolders(
       : '';
 
   const rows = await db.getAllAsync<FolderRow>(
-    `SELECT f.* ${selectExtra}
-     FROM folders f ${joinExtra}
+    `SELECT f.id, f.name, f.parent_id, f.dir_path,
+            COALESCE(dh.page_url, f.source_url) as source_url,
+            f.created_at, f.view_count, f.image_count ${selectExtra}
+     FROM folders f
+     LEFT JOIN download_history dh ON dh.folder_id = f.id
+     ${joinExtra}
      WHERE f.parent_id IS ?
        AND (? = '' OR f.name LIKE ? OR EXISTS (
          SELECT 1 FROM folder_tags ft2 JOIN tags t2 ON t2.id = ft2.tag_id
@@ -149,7 +153,15 @@ export async function listFolders(
 }
 
 export async function getFolder(db: SQLiteDatabase, id: string): Promise<FolderWithTags | null> {
-  const row = await db.getFirstAsync<FolderRow>('SELECT * FROM folders WHERE id = ?', id);
+  const row = await db.getFirstAsync<FolderRow>(
+    `SELECT f.id, f.name, f.parent_id, f.dir_path,
+            COALESCE(dh.page_url, f.source_url) as source_url,
+            f.created_at, f.view_count, f.image_count
+     FROM folders f
+     LEFT JOIN download_history dh ON dh.folder_id = f.id
+     WHERE f.id = ?`,
+    id,
+  );
   if (!row) {
     return null;
   }
