@@ -24,6 +24,8 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GAP = 2;
 const DISMISS_DISTANCE = 100;
 const DISMISS_VELOCITY = 800;
+const AXIS_LOCK_THRESHOLD = 8;
+const INERTIA_FACTOR = 0.25;
 
 type PageItem = { uri: string; folderId: string; width: number; height: number };
 
@@ -170,6 +172,10 @@ function ImageViewerContent({
   const translateMain = useSharedValue(initialMain);
   const translateCross = useSharedValue(0);
   const startMain = useSharedValue(initialMain);
+  // 0 = undecided, 1 = locked to the main (paging) axis, 2 = locked to the
+  // cross (dismiss) axis. Decided once the drag clears a small threshold, so
+  // a gesture can only ever move along one axis — never diagonally.
+  const axisLock = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(clampedStartIndex);
 
   const setIndex = useCallback((index: number) => {
@@ -202,10 +208,18 @@ function ImageViewerContent({
   const pan = Gesture.Pan()
     .onStart(() => {
       startMain.value = translateMain.value;
+      axisLock.value = 0;
     })
     .onUpdate((event) => {
-      const mainDelta = isHorizontal ? event.translationX : event.translationY;
-      const crossDelta = isHorizontal ? event.translationY : event.translationX;
+      const mainRaw = isHorizontal ? event.translationX : event.translationY;
+      const crossRaw = isHorizontal ? event.translationY : event.translationX;
+      if (axisLock.value === 0) {
+        if (Math.abs(mainRaw) > AXIS_LOCK_THRESHOLD || Math.abs(crossRaw) > AXIS_LOCK_THRESHOLD) {
+          axisLock.value = Math.abs(mainRaw) >= Math.abs(crossRaw) ? 1 : 2;
+        }
+      }
+      const mainDelta = axisLock.value === 2 ? 0 : mainRaw;
+      const crossDelta = axisLock.value === 1 ? 0 : crossRaw;
       translateMain.value = startMain.value + mainDelta;
       translateCross.value = crossDelta;
     })
@@ -225,8 +239,10 @@ function ImageViewerContent({
       }
       translateCross.value = withSpring(0, { damping: 20 });
 
-      // Free-scroll: let the fling decay naturally instead of snapping to a page.
-      const mainVelocity = isHorizontal ? event.velocityX : event.velocityY;
+      // Free-scroll: let the fling decay naturally instead of snapping to a
+      // page, but at a quarter of the raw flick velocity so a fast swipe
+      // doesn't send the image sailing/wobbling on afterward.
+      const mainVelocity = (isHorizontal ? event.velocityX : event.velocityY) * INERTIA_FACTOR;
       const minTranslate = isHorizontal
         ? -(Math.max(pages.length - 1, 0) * pageSize)
         : -(pageOffsets.length > 0 ? pageOffsets[pageOffsets.length - 1] : 0);

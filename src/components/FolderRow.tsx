@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { FolderWithTags } from '../db/types';
 import { listFolderImageUris } from '../db/folderImages';
 import { useAppTheme } from '../theme/theme';
+import { useSwipeRowCoordinator } from './SwipeRowCoordinator';
+
+const AUTO_CLOSE_MS = 4000;
 
 type FolderRowProps = {
   folder: FolderWithTags;
@@ -25,6 +28,9 @@ export function FolderRow({
 }: FolderRowProps) {
   const { colors } = useAppTheme();
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  const swipeableRef = useRef<Swipeable>(null);
+  const coordinator = useSwipeRowCoordinator();
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,8 +44,33 @@ export function FolderRow({
     };
   }, [folder]);
 
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleSwipeableWillOpen = () => {
+    const close = () => swipeableRef.current?.close();
+    coordinator?.notifyOpen(close);
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = setTimeout(close, AUTO_CLOSE_MS);
+  };
+
+  const handleJumpPress = () => {
+    swipeableRef.current?.close();
+    onJumpToSource?.();
+  };
+
   return (
     <Swipeable
+      ref={swipeableRef}
+      onSwipeableWillOpen={handleSwipeableWillOpen}
       renderLeftActions={() => (
         <TouchableOpacity
           style={styles.deleteAction}
@@ -55,7 +86,7 @@ export function FolderRow({
           ? () => (
               <TouchableOpacity
                 style={styles.jumpAction}
-                onPress={onJumpToSource}
+                onPress={handleJumpPress}
                 accessibilityLabel="jump-to-source"
               >
                 <Ionicons name="open-outline" size={20} color="#fff" />

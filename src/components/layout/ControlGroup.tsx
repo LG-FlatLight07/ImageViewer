@@ -27,7 +27,7 @@ import {
 /** Edge inset for a full-width 'bar' group. */
 export const BAR_MARGIN = 12;
 /** Edge inset for a compact 'buttons' group — smaller so it hugs the screen corner. */
-const BUTTONS_MARGIN = 6;
+const BUTTONS_MARGIN = 3;
 const STACK_GAP = 6;
 const MAX_HORIZONTAL_WIDTH = 220;
 
@@ -236,7 +236,11 @@ export function ControlGroup({
     const candidates = edgesOnly
       ? allCandidates.filter((a) => a === EDGE_TOP_ANCHOR || a === EDGE_BOTTOM_ANCHOR)
       : allCandidates;
-    const others = registry.getOthers(screenId);
+    // Overlapping the designated stack peer is fine — that's exactly what
+    // the render-time stacking logic above resolves — so it must not be
+    // treated as a blocked candidate here, or dragging onto the peer's edge
+    // would just bounce back to wherever this group started.
+    const others = registry.getOthers(screenId).filter((other) => other.id !== stackPeerId);
     const nonOverlapping = candidates.find((candidate) => {
       const candidateOrigin = getAnchorOrigin(candidate, bounds, effectiveSize, EDGE_MARGIN);
       const rect = {

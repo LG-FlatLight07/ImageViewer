@@ -18,6 +18,7 @@ import { SEARCH_ENGINES, useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
+import { AD_BLOCK_SCRIPT } from '../../services/adBlock';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import type { BrowserStackParamList } from '../../navigation/types';
 import { addHistoryEntry } from '../../db/historyRepository';
@@ -36,6 +37,7 @@ export function BrowserScreen() {
   const { colors } = useAppTheme();
   const searchEngine = useSettingsStore((state) => state.searchEngine);
   const disableHistory = useSettingsStore((state) => state.disableHistory);
+  const adBlockEnabled = useSettingsStore((state) => state.adBlockEnabled);
   const tabs = useBrowserStore((state) => state.tabs);
   const activeTabId = useBrowserStore((state) => state.activeTabId);
   const activeTab = useActiveBrowserTab();
@@ -192,6 +194,9 @@ export function BrowserScreen() {
           onMessage={handleMessage}
           startInLoadingState
           incognito={disableHistory}
+          injectedJavaScriptBeforeContentLoaded={adBlockEnabled ? AD_BLOCK_SCRIPT : undefined}
+          setSupportMultipleWindows={!adBlockEnabled}
+          onOpenWindow={adBlockEnabled ? () => {} : undefined}
         />
         {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
 

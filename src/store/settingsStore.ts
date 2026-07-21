@@ -44,12 +44,14 @@ type SettingsState = {
   folderNameExclusions: string[];
   disableHistory: boolean;
   imageViewerDirection: ImageViewerDirection;
+  adBlockEnabled: boolean;
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
   addFolderNameExclusion: (text: string) => void;
   removeFolderNameExclusion: (text: string) => void;
   setDisableHistory: (disableHistory: boolean) => void;
   setImageViewerDirection: (direction: ImageViewerDirection) => void;
+  setAdBlockEnabled: (enabled: boolean) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -60,6 +62,7 @@ export const useSettingsStore = create<SettingsState>()(
       folderNameExclusions: [],
       disableHistory: false,
       imageViewerDirection: 'horizontal',
+      adBlockEnabled: true,
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
       addFolderNameExclusion: (text) =>
@@ -76,6 +79,7 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       setDisableHistory: (disableHistory) => set({ disableHistory }),
       setImageViewerDirection: (imageViewerDirection) => set({ imageViewerDirection }),
+      setAdBlockEnabled: (adBlockEnabled) => set({ adBlockEnabled }),
     }),
     {
       name: 'settings-store',

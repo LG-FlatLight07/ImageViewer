@@ -19,6 +19,7 @@ import {
 } from '../../db/foldersRepository';
 import { deleteFolderFiles } from '../../db/folderImages';
 import { FolderRow } from '../../components/FolderRow';
+import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
@@ -31,7 +32,8 @@ import { useAppTheme } from '../../theme/theme';
 
 const SEARCH_SCREEN_ID = 'gallery.folderList.search';
 const SORT_SCREEN_ID = 'gallery.folderList.sort';
-const MIN_LIST_PADDING_TOP = 64;
+const MIN_LIST_PADDING_TOP = 80;
+const LIST_RESERVE_GAP = 24;
 
 const SORT_OPTIONS: { key: FolderSortKey; label: string }[] = [
   { key: 'name', label: '名前順' },
@@ -44,7 +46,7 @@ export function FolderListScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
   const rootNavigation = useRootNavigation();
-  const setBrowserUrl = useBrowserStore((state) => state.setUrl);
+  const openTab = useBrowserStore((state) => state.openTab);
   const { colors } = useAppTheme();
   const searchAnchor = useLayoutStore((state) => state.layouts[SEARCH_SCREEN_ID]?.anchor);
   const searchAtBottom = searchAnchor === EDGE_BOTTOM_ANCHOR;
@@ -114,43 +116,47 @@ export function FolderListScreen() {
     if (!folder.sourceUrl) {
       return;
     }
-    setBrowserUrl(folder.sourceUrl);
+    openTab(folder.sourceUrl);
     rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
   };
 
   const currentSortLabel = SORT_OPTIONS.find((option) => option.key === sortKey)?.label ?? '';
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top']}
-    >
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={[]}>
       <DraggableLayoutArea>
-        <FlatList
-          style={styles.list}
-          contentContainerStyle={[
-            styles.listContent,
-            searchAtBottom
-              ? { paddingTop: 12, paddingBottom: Math.max(searchBarHeight + 20, 24) }
-              : { paddingTop: Math.max(searchBarHeight + 20, MIN_LIST_PADDING_TOP) },
-          ]}
-          data={folders}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <FolderRow
-              folder={item}
-              onPress={() => navigation.navigate('FolderDetail', { folderId: item.id })}
-              onOpenMenu={() => setMenuFolder(item)}
-              onDelete={() => handleDelete(item)}
-              onJumpToSource={item.sourceUrl ? () => handleJumpToSource(item) : undefined}
-            />
-          )}
-          ListEmptyComponent={
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              フォルダがありません
-            </Text>
-          }
-        />
+        <SwipeRowCoordinatorProvider>
+          <FlatList
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              searchAtBottom
+                ? {
+                    paddingTop: 12,
+                    paddingBottom: Math.max(searchBarHeight + LIST_RESERVE_GAP, 24),
+                  }
+                : {
+                    paddingTop: Math.max(searchBarHeight + LIST_RESERVE_GAP, MIN_LIST_PADDING_TOP),
+                  },
+            ]}
+            data={folders}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <FolderRow
+                folder={item}
+                onPress={() => navigation.navigate('FolderDetail', { folderId: item.id })}
+                onOpenMenu={() => setMenuFolder(item)}
+                onDelete={() => handleDelete(item)}
+                onJumpToSource={item.sourceUrl ? () => handleJumpToSource(item) : undefined}
+              />
+            )}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                フォルダがありません
+              </Text>
+            }
+          />
+        </SwipeRowCoordinatorProvider>
 
         <ControlGroup
           screenId={SEARCH_SCREEN_ID}

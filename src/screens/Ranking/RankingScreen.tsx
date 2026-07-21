@@ -1,13 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  FlatList,
-  Image,
-  LayoutAnimation,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -30,6 +22,7 @@ import {
 } from '../../db/rankingRepository';
 import { listFolderImageUris } from '../../db/folderImages';
 import { useBrowserStore } from '../../store/browserStore';
+import { useDownloadStore } from '../../store/downloadStore';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import { useAppTheme } from '../../theme/theme';
 
@@ -41,14 +34,19 @@ const PERIOD_OPTIONS: { key: RankingPeriod; label: string }[] = [
 
 const SWIPE_DISTANCE = 60;
 const SWIPE_VELOCITY = 500;
+const SLIDE_DISTANCE = 28;
+const SLIDE_DURATION = 220;
 
 export function RankingScreen() {
   const db = useSQLiteContext();
   const rootNavigation = useRootNavigation();
-  const setBrowserUrl = useBrowserStore((state) => state.setUrl);
+  const openTab = useBrowserStore((state) => state.openTab);
+  const downloadActive = useDownloadStore((state) => state.active);
   const { colors } = useAppTheme();
   const [period, setPeriod] = useState<RankingPeriod>('day');
   const [entries, setEntries] = useState<RankingEntry[]>([]);
+  const slideX = useSharedValue(0);
+  const slideOpacity = useSharedValue(1);
 
   const reload = useCallback(async () => {
     setEntries(await getDownloadRanking(db, period));
@@ -60,23 +58,49 @@ export function RankingScreen() {
     }, [reload]),
   );
 
+  // A download can finish while the user is already sitting on this screen
+  // (e.g. they switched tabs mid-download), in which case useFocusEffect
+  // never re-fires — catch that transition explicitly so the new entry
+  // doesn't require leaving and re-entering the screen to show up.
+  const wasDownloadActiveRef = useRef(false);
+  useEffect(() => {
+    if (wasDownloadActiveRef.current && !downloadActive) {
+      reload();
+    }
+    wasDownloadActiveRef.current = downloadActive;
+  }, [downloadActive, reload]);
+
   const openUrl = (url: string) => {
-    setBrowserUrl(url);
+    openTab(url);
     rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
   };
 
   const periodIndex = PERIOD_OPTIONS.findIndex((option) => option.key === period);
 
-  const changePeriod = useCallback((next: RankingPeriod) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPeriod(next);
-  }, []);
+  const changePeriod = useCallback(
+    (next: RankingPeriod, direction: number) => {
+      if (next === period) {
+        return;
+      }
+      slideX.value = direction * SLIDE_DISTANCE;
+      slideOpacity.value = 0;
+      slideX.value = withTiming(0, { duration: SLIDE_DURATION });
+      slideOpacity.value = withTiming(1, { duration: SLIDE_DURATION });
+      setPeriod(next);
+    },
+    // slideX/slideOpacity (useSharedValue refs) are intentionally omitted:
+    // they're referentially stable across renders, and including them trips
+    // a lint rule that then flags every .value mutation on them anywhere in
+    // the file as invalid.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [period],
+  );
 
   const switchPeriod = useCallback(
     (delta: number) => {
       const nextIndex = Math.min(PERIOD_OPTIONS.length - 1, Math.max(0, periodIndex + delta));
       if (nextIndex !== periodIndex) {
-        changePeriod(PERIOD_OPTIONS[nextIndex].key);
+        changePeriod(PERIOD_OPTIONS[nextIndex].key, delta);
       }
     },
     [periodIndex, changePeriod],
@@ -93,6 +117,11 @@ export function RankingScreen() {
       }
     });
 
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: slideX.value }],
+    opacity: slideOpacity.value,
+  }));
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -106,7 +135,7 @@ export function RankingScreen() {
       </View>
 
       <View style={styles.periodRow}>
-        {PERIOD_OPTIONS.map((option) => (
+        {PERIOD_OPTIONS.map((option, index) => (
           <TouchableOpacity
             key={option.key}
             style={[
@@ -114,7 +143,7 @@ export function RankingScreen() {
               { backgroundColor: colors.surface },
               period === option.key && { backgroundColor: colors.primary },
             ]}
-            onPress={() => changePeriod(option.key)}
+            onPress={() => changePeriod(option.key, index > periodIndex ? 1 : -1)}
           >
             <Text
               style={[
@@ -130,19 +159,21 @@ export function RankingScreen() {
       </View>
 
       <GestureDetector gesture={swipeGesture}>
-        <FlatList
-          data={entries}
-          keyExtractor={(item) => item.sourceUrl}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item, index }) => (
-            <RankingRow entry={item} rank={index + 1} onPress={() => openUrl(item.sourceUrl)} />
-          )}
-          ListEmptyComponent={
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              この期間のダウンロード実績はありません
-            </Text>
-          }
-        />
+        <Animated.View style={[styles.flex, slideStyle]}>
+          <FlatList
+            data={entries}
+            keyExtractor={(item) => item.sourceUrl}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item, index }) => (
+              <RankingRow entry={item} rank={index + 1} onPress={() => openUrl(item.sourceUrl)} />
+            )}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                この期間のダウンロード実績はありません
+              </Text>
+            }
+          />
+        </Animated.View>
       </GestureDetector>
     </SafeAreaView>
   );
@@ -238,11 +269,17 @@ function MarqueeText({ text, textStyle }: { text: string; textStyle?: object }) 
       style={styles.marqueeClip}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
     >
-      <Animated.Text
-        style={[textStyle, styles.marqueeText, animatedStyle]}
-        numberOfLines={1}
+      {/* Invisible, unclipped, un-numberOfLines-limited clone used purely to
+          measure the text's true natural width — decoupled from the visible
+          copy below so numberOfLines/flex quirks on that copy can't distort
+          the overflow measurement. */}
+      <Text
+        style={[textStyle, styles.marqueeMeasure]}
         onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
       >
+        {text}
+      </Text>
+      <Animated.Text style={[textStyle, styles.marqueeText, animatedStyle]} numberOfLines={1}>
         {text}
       </Animated.Text>
     </View>
@@ -251,6 +288,9 @@ function MarqueeText({ text, textStyle }: { text: string; textStyle?: object }) 
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   header: {
@@ -300,6 +340,10 @@ const styles = StyleSheet.create({
   },
   marqueeText: {
     alignSelf: 'flex-start',
+  },
+  marqueeMeasure: {
+    position: 'absolute',
+    opacity: 0,
   },
   rank: {
     width: 28,

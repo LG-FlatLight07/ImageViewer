@@ -52,6 +52,8 @@ export function SettingsScreen() {
   const setThemePreference = useSettingsStore((state) => state.setThemePreference);
   const disableHistory = useSettingsStore((state) => state.disableHistory);
   const setDisableHistory = useSettingsStore((state) => state.setDisableHistory);
+  const adBlockEnabled = useSettingsStore((state) => state.adBlockEnabled);
+  const setAdBlockEnabled = useSettingsStore((state) => state.setAdBlockEnabled);
   const imageViewerDirection = useSettingsStore((state) => state.imageViewerDirection);
   const setImageViewerDirection = useSettingsStore((state) => state.setImageViewerDirection);
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
@@ -152,6 +154,21 @@ export function SettingsScreen() {
             value={disableHistory}
             onValueChange={setDisableHistory}
             accessibilityLabel="toggle-disable-history"
+          />
+        </View>
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View style={styles.rowTextGroup}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              広告・ポップアップをブロック
+            </Text>
+            <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
+              広告らしき要素を非表示にし、ポップアップウィンドウを開かないようにします
+            </Text>
+          </View>
+          <Switch
+            value={adBlockEnabled}
+            onValueChange={setAdBlockEnabled}
+            accessibilityLabel="toggle-ad-block"
           />
         </View>
 

@@ -20,6 +20,7 @@ import {
 } from '../../db/foldersRepository';
 import { deleteFolderFiles, deleteImageFiles, listFolderImageUris } from '../../db/folderImages';
 import { FolderRow } from '../../components/FolderRow';
+import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
 import { TagEditorModal } from '../../components/TagEditorModal';
@@ -53,7 +54,7 @@ export function FolderDetailScreen() {
   const route = useRoute<RouteProp<GalleryStackParamList, 'FolderDetail'>>();
   const { folderId } = route.params;
   const { colors } = useAppTheme();
-  const setBrowserUrl = useBrowserStore((state) => state.setUrl);
+  const openTab = useBrowserStore((state) => state.openTab);
   const headerAnchor = useLayoutStore((state) => state.layouts[HEADER_SCREEN_ID]?.anchor);
   const actionsAnchor = useLayoutStore((state) => state.layouts[ACTIONS_SCREEN_ID]?.anchor);
 
@@ -108,7 +109,7 @@ export function FolderDetailScreen() {
     if (!target.sourceUrl) {
       return;
     }
-    setBrowserUrl(target.sourceUrl);
+    openTab(target.sourceUrl);
     rootNavigation.navigate('MainTabs', { screen: 'Browser' } as never);
   };
 
@@ -184,63 +185,71 @@ export function FolderDetailScreen() {
             </View>
           )}
 
-          <FlatList
-            style={styles.list}
-            data={items}
-            key={IMAGE_COLUMNS}
-            numColumns={IMAGE_COLUMNS}
-            keyExtractor={(item) =>
-              item.type === 'subfolder' ? `f-${item.folder.id}` : `i-${item.uri}`
-            }
-            renderItem={({ item }) => {
-              if (item.type === 'subfolder') {
-                return (
-                  <View style={styles.fullWidthRow}>
-                    <FolderRow
-                      folder={item.folder}
-                      onPress={() => navigation.push('FolderDetail', { folderId: item.folder.id })}
-                      onOpenMenu={() => setMenuFolder(item.folder)}
-                      onDelete={() => handleDeleteSubfolder(item.folder)}
-                      onJumpToSource={
-                        item.folder.sourceUrl ? () => handleJumpToSource(item.folder) : undefined
-                      }
-                    />
-                  </View>
-                );
+          <SwipeRowCoordinatorProvider>
+            <FlatList
+              style={styles.list}
+              data={items}
+              key={IMAGE_COLUMNS}
+              numColumns={IMAGE_COLUMNS}
+              keyExtractor={(item) =>
+                item.type === 'subfolder' ? `f-${item.folder.id}` : `i-${item.uri}`
               }
-              const selected = selectedUris.has(item.uri);
-              return (
-                <TouchableOpacity
-                  style={[styles.imageCell, { backgroundColor: colors.surface }]}
-                  onPress={() =>
-                    selectionMode
-                      ? toggleImageSelected(item.uri)
-                      : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
-                  }
-                >
-                  <Image source={{ uri: item.uri }} style={styles.imageThumb} resizeMode="cover" />
-                  {selectionMode && (
-                    <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>
-                      <Ionicons
-                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={20}
-                        color={selected ? '#4c8bf5' : '#fff'}
+              renderItem={({ item }) => {
+                if (item.type === 'subfolder') {
+                  return (
+                    <View style={styles.fullWidthRow}>
+                      <FolderRow
+                        folder={item.folder}
+                        onPress={() =>
+                          navigation.push('FolderDetail', { folderId: item.folder.id })
+                        }
+                        onOpenMenu={() => setMenuFolder(item.folder)}
+                        onDelete={() => handleDeleteSubfolder(item.folder)}
+                        onJumpToSource={
+                          item.folder.sourceUrl ? () => handleJumpToSource(item.folder) : undefined
+                        }
                       />
                     </View>
-                  )}
-                </TouchableOpacity>
-              );
-            }}
-            contentContainerStyle={[
-              styles.listContent,
-              selectionMode && styles.listContentWithFooter,
-            ]}
-            ListEmptyComponent={
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                このフォルダは空です
-              </Text>
-            }
-          />
+                  );
+                }
+                const selected = selectedUris.has(item.uri);
+                return (
+                  <TouchableOpacity
+                    style={[styles.imageCell, { backgroundColor: colors.surface }]}
+                    onPress={() =>
+                      selectionMode
+                        ? toggleImageSelected(item.uri)
+                        : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
+                    }
+                  >
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={styles.imageThumb}
+                      resizeMode="cover"
+                    />
+                    {selectionMode && (
+                      <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>
+                        <Ionicons
+                          name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={20}
+                          color={selected ? '#4c8bf5' : '#fff'}
+                        />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              contentContainerStyle={[
+                styles.listContent,
+                selectionMode && styles.listContentWithFooter,
+              ]}
+              ListEmptyComponent={
+                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                  このフォルダは空です
+                </Text>
+              }
+            />
+          </SwipeRowCoordinatorProvider>
         </View>
 
         <ControlGroup

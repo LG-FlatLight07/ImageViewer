@@ -13,11 +13,12 @@ export function useDraggableBounds(): Bounds {
 }
 
 export type RegisteredRect = Rect & { variant: 'buttons' | 'bar' };
+export type IdentifiedRect = RegisteredRect & { id: string };
 
 type Registry = {
   register: (id: string, rect: RegisteredRect) => void;
   unregister: (id: string) => void;
-  getOthers: (excludeId: string) => RegisteredRect[];
+  getOthers: (excludeId: string) => IdentifiedRect[];
   getRect: (id: string) => RegisteredRect | undefined;
 };
 
@@ -64,7 +65,7 @@ export function DraggableLayoutArea({ children }: { children: React.ReactNode })
       getOthers: (excludeId) =>
         Array.from(rectsRef.current.entries())
           .filter(([id]) => id !== excludeId)
-          .map(([, rect]) => rect),
+          .map(([id, rect]) => ({ ...rect, id })),
       getRect: (id) => rectsRef.current.get(id),
     }),
     [],
