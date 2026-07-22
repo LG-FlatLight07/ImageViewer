@@ -75,9 +75,14 @@ export function ImageSelectionScreen() {
         useDownloadStore.getState().updateProgress(completed, total),
     })
       .then((result) => {
+        if (result.successCount === 0) {
+          useDownloadStore.getState().finish('すべての画像のダウンロードに失敗しました');
+          return;
+        }
         useDownloadStore.getState().finish(`ダウンロード完了: ${result.successCount}枚`);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[ImageSelectionScreen] downloadImagesToNewFolder threw', err);
         useDownloadStore.getState().finish('ダウンロードに失敗しました');
       });
   };

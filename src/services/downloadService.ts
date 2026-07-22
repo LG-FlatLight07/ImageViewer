@@ -91,13 +91,22 @@ async function downloadWithConcurrency(
         const file = new File(directory, fileName);
         try {
           await File.downloadFileAsync(url, file, { idempotent: true, headers });
-        } catch {
+        } catch (headerErr) {
           // Some sites reject a synthetic Referer/Origin outright (e.g. a
           // strict allowlist, or a CDN expecting no referrer at all for
           // signed/tokenized URLs) even though the same image downloaded
           // fine with no headers before this was added. Retry bare so a
           // site that worked before this header logic existed keeps working.
-          await File.downloadFileAsync(url, file, { idempotent: true });
+          try {
+            await File.downloadFileAsync(url, file, { idempotent: true });
+          } catch (bareErr) {
+            console.warn('[downloadService] image download failed (with and without headers)', {
+              url,
+              headerErr: headerErr instanceof Error ? headerErr.message : String(headerErr),
+              bareErr: bareErr instanceof Error ? bareErr.message : String(bareErr),
+            });
+            throw bareErr;
+          }
         }
         successCount += 1;
         if (firstSuccessIndex === -1 || index < firstSuccessIndex) {
@@ -105,7 +114,8 @@ async function downloadWithConcurrency(
           firstImageUri = file.uri;
         }
       } catch {
-        // skip failed downloads and continue with the rest of the batch
+        // already logged above (or the file-system write itself failed) —
+        // skip this image and continue with the rest of the batch
       } finally {
         onEach();
       }
@@ -153,13 +163,24 @@ export async function downloadImagesToNewFolder(
     imageCount: successCount,
   });
 
-  await recordDownloadHistory(db, {
-    folderId: folder.id,
-    pageUrl: options.sourceUrl,
-    pageTitle: options.folderName,
-    firstImageUri,
-    imageCount: successCount,
-  });
+  try {
+    await recordDownloadHistory(db, {
+      folderId: folder.id,
+      pageUrl: options.sourceUrl,
+      pageTitle: options.folderName,
+      firstImageUri,
+      imageCount: successCount,
+    });
+  } catch (err) {
+    // The folder and its images already exist on disk and in `folders` at
+    // this point — a failure recording ranking/jump-URL metadata is a
+    // secondary bookkeeping problem, not a reason to tell the user their
+    // download failed when it didn't. Log it and keep going.
+    console.warn(
+      '[downloadService] recordDownloadHistory failed (folder/images were saved regardless)',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 
   return { folderId: folder.id, successCount, failureCount: total - successCount };
 }
