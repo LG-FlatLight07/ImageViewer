@@ -32,13 +32,26 @@ export const IMAGE_SCAN_SCRIPT = `
     return false;
   }
   function resolveSrc(img) {
-    return (
+    var raw =
       img.getAttribute('data-src') ||
       img.getAttribute('data-original') ||
       img.getAttribute('data-lazy-src') ||
-      img.src ||
-      ''
-    );
+      img.getAttribute('src') ||
+      '';
+    if (!raw || raw.indexOf('data:') === 0) {
+      return raw;
+    }
+    // Lazy-loading attributes (data-src etc.) commonly hold a page-relative
+    // or protocol-relative path rather than an absolute URL — unlike the
+    // .src DOM property, getAttribute() never resolves it. An unresolved
+    // relative URL survives all the way to the native downloader and fails
+    // there (it's not a fetchable absolute URL), which is a major cause of
+    // "the download fails" reports for lazy-loaded gallery sites.
+    try {
+      return new URL(raw, document.baseURI).href;
+    } catch (e) {
+      return raw;
+    }
   }
   var nodes = Array.prototype.slice.call(document.images);
   var results = [];

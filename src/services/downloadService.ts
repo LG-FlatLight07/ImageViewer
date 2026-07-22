@@ -48,10 +48,26 @@ function inferExtension(url: string): string {
   return match ? match[1].toLowerCase() : 'jpg';
 }
 
+function buildDownloadHeaders(sourceUrl: string): Record<string, string> {
+  // Many image CDNs (very common on manga/gallery sites) reject requests
+  // that don't look like they came from the page itself (hotlink
+  // protection) — a bare download request with no Referer/Origin is a
+  // frequent cause of every image in a batch failing. A normal in-page
+  // <img> load always carries these headers, so replicate that here.
+  const headers: Record<string, string> = { Referer: sourceUrl };
+  try {
+    headers.Origin = new URL(sourceUrl).origin;
+  } catch {
+    // sourceUrl wasn't a parseable absolute URL — send Referer only.
+  }
+  return headers;
+}
+
 async function downloadWithConcurrency(
   urls: string[],
   directory: Directory,
   concurrency: number,
+  headers: Record<string, string>,
   onEach: () => void,
 ): Promise<{ successCount: number; firstImageUri: string | null }> {
   let successCount = 0;
@@ -73,7 +89,7 @@ async function downloadWithConcurrency(
       const fileName = `${String(index + 1).padStart(digits, '0')}.${inferExtension(url)}`;
       try {
         const file = new File(directory, fileName);
-        await File.downloadFileAsync(url, file, { idempotent: true });
+        await File.downloadFileAsync(url, file, { idempotent: true, headers });
         successCount += 1;
         if (firstSuccessIndex === -1 || index < firstSuccessIndex) {
           firstSuccessIndex = index;
@@ -112,6 +128,7 @@ export async function downloadImagesToNewFolder(
     options.imageUrls,
     directory,
     DOWNLOAD_CONCURRENCY,
+    buildDownloadHeaders(options.sourceUrl),
     () => {
       completed += 1;
       options.onProgress?.(completed, total);
