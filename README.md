@@ -178,7 +178,43 @@ src/
 - **ユニットテスト**: `src/services/**/__tests__` に画像検出・URL解析ロジックのテストを配置(`npm test`)
 - **EAS Build**: `eas.json` にdevelopment/preview/productionのビルドプロファイルを用意
   (`npx eas build --profile production --platform android|ios` 等で利用)
-- **プライバシーポリシー**: [`PRIVACY.md`](./PRIVACY.md) を参照。本アプリは外部サーバーへの
-  データ送信を行わず、閲覧履歴・ブックマーク・ダウンロード画像はすべて端末内にのみ保存されます
+- **プライバシーポリシー**: [`PRIVACY.md`](./PRIVACY.md) を参照。閲覧履歴・ブックマーク・
+  ダウンロード画像は端末内にのみ保存されますが、ダウンロードランキング機能のため
+  URL・タイトル・ダウンロード枚数(個人を特定できる情報は含まない)をSupabaseへ送信します
 - **バンドルID**: iOS `com.lgflatlight07.imageviewer` / Android `com.lgflatlight07.imageviewer`
   (`app.json`。実際に申請する場合は組織のドメインに合わせて変更してください)
+
+### Android(Google Play)への公開手順
+
+現状、iOSはApple Developer Program(年額$99)未登録のため配布できません。まずはAndroid
+(Google Play)への公開を進める場合の手順は以下の通りです。ここから先はGoogleアカウントでの
+登録・支払いが必要なため、開発者(ユーザー)自身の操作が必要です。
+
+1. **Googleアカウントの準備**: 公開用に使うGoogleアカウントを決める
+2. **Google Play Console への登録**(https://play.google.com/console/ ) — 初回のみ
+   登録料 $25(一回のみ、以後の年会費なし)。個人/組織アカウントの選択、本人確認が必要
+3. **アプリを新規作成**: Play Console上で「アプリを作成」→ アプリ名・言語・
+   無料/有料・ポリシー系の宣言(広告の有無等)を入力
+4. **ストア掲載情報を入力**: タイトル・説明文・アイコン・スクリーンショット・カテゴリ等。
+   下書きは [`STORE_LISTING.md`](./STORE_LISTING.md) を参照してコピー&ペースト可能
+   - **スクリーンショット**: このサンドボックス環境では `react-native-webview` が
+     react-native-web上で動作しないため撮影できません。実機または
+     「Androidエミュレータでのプレビュー」で実際にアプリを操作しながら撮影してください
+5. **プライバシーポリシーのURL登録**: [`PRIVACY.md`](./PRIVACY.md) の内容を、
+   誰でもアクセスできるURLとして登録する必要があります(GitHubのファイル表示URL
+   `https://github.com/<owner>/<repo>/blob/main/PRIVACY.md` で構いません)
+6. **データセーフティの入力**: 「収集するデータの種類」を聞かれるので、
+   [`STORE_LISTING.md`](./STORE_LISTING.md) のデータセーフティ回答案を参照して入力
+7. **コンテンツレーティングの質問に回答**(Play Console上のアンケート形式)
+8. **アプリのビルド**: `npx eas build --profile production --platform android`
+   (初回は `npx eas login` でExpoアカウントへのログインが必要。Androidの署名鍵は
+   EASが自動生成・管理します)
+9. **Play Consoleへの提出**:
+   - 手動: ビルド完了後にダウンロードされる `.aab` ファイルをPlay Consoleの
+     「テスト」→「内部テスト」トラックなどに手動アップロード
+   - 自動: Google Cloudでサービスアカウントを作成しPlay Consoleに権限を付与、
+     ダウンロードしたJSON鍵を `google-service-account.json` としてプロジェクト直下に置き
+     (`.gitignore` 済み、絶対にコミットしないこと)、`npx eas submit --platform android`
+     を実行(`eas.json` の `submit.production.android` を参照)
+10. **内部テスト→本番公開**: まずは内部テスト/クローズドテストで動作確認してから、
+    Play Consoleの審査を経て段階的に本番公開する

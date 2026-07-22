@@ -433,7 +433,43 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ggilmEu19iELkFWMWNmunw_0V8_nSNz
 
 ---
 
-## 9. タスク管理ツールの状態
+## 10. Android公開準備(#129〜#134)
 
-このセッションのタスクリストは #1〜#128 まで全て `completed`。バックエンド導入は完了・
-実機検証済み。次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
+ユーザーの希望で、まずAndroid(Google Play)への公開準備のみを先行して進めた
+(iOSはApple Developer Program未登録のため後回し)。
+
+- **`PRIVACY.md`**: これまで「外部送信は一切なし」という記述のままSupabase導入前の内容で
+  放置されていたため、実態(ランキング用のURL・タイトル・枚数送信、開発者メッセージ送信)に
+  合わせて全面的に書き直した。ストア審査に出す前に気づけて良かったポイント
+- **`README.md`**:「リリース準備」節に「Android(Google Play)への公開手順」を追加。
+  Play Console登録($25・一回のみ)→ストア掲載情報入力→プライバシーポリシーURL登録→
+  データセーフティ回答→コンテンツレーティング→`eas build`→`eas submit`、という一連の
+  流れと、スクリーンショットはサンドボックスで撮影不可(実機/エミュレータで撮る必要あり)
+  な旨を明記
+- **`STORE_LISTING.md`(新規)**: ストア掲載用のタイトル・説明文・カテゴリ・
+  データセーフティ回答案の下書き。Play Consoleにそのままコピー&ペーストできる想定
+- **`eas.json`**: `submit.production.android` に `serviceAccountKeyPath` と
+  `track: "internal"` を追加(内部テストトラックへの自動提出用)。鍵ファイル
+  `google-service-account.json` は `.gitignore` に追加済み(未作成・ユーザーがPlay Console
+  でサービスアカウントを発行した後に配置する想定)
+
+### 10-1. ここから先はユーザー自身の操作が必要(私はアカウント作成・支払いができない)
+
+1. Google Play Consoleへの登録($25・本人確認あり)
+2. アプリの新規作成・ストア掲載情報の入力(`STORE_LISTING.md`参照)
+3. プライバシーポリシーを公開URLとして登録(GitHubのファイル表示URLで可)
+4. 実機またはAndroidエミュレータでの操作画面のスクリーンショット撮影
+5. `npx eas login` → `npx eas build --profile production --platform android`
+6. (自動提出する場合)Google Cloudでサービスアカウントを作成しPlay Consoleに権限付与、
+   JSON鍵を `google-service-account.json` として配置 → `npx eas submit --platform android`
+7. 内部テスト→クローズドテスト→本番公開、の順にPlay Console上で審査・公開を進める
+
+iOS側は上記が一段落し、Apple Developer Program登録の意思があれば別途着手する想定。
+
+---
+
+## 11. タスク管理ツールの状態
+
+このセッションのタスクリストは #1〜#134 まで全て `completed`。バックエンド導入・
+Android公開準備(ドキュメント整備まで)は完了。実際のPlay Console登録・ビルド提出は
+ユーザー側の操作待ち。次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
