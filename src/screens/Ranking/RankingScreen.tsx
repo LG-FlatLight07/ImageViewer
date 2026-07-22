@@ -20,6 +20,11 @@ import {
   type RankingEntry,
   type RankingPeriod,
 } from '../../db/rankingRepository';
+import { getCachedThumbnails, setCachedThumbnail } from '../../db/rankingThumbnailRepository';
+import {
+  RankingThumbnailScanner,
+  type ThumbnailScanItem,
+} from '../../components/RankingThumbnailScanner';
 import { useBrowserStore } from '../../store/browserStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
@@ -44,12 +49,23 @@ export function RankingScreen() {
   const { colors } = useAppTheme();
   const [period, setPeriod] = useState<RankingPeriod>('day');
   const [entries, setEntries] = useState<RankingEntry[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  const [scanQueue, setScanQueue] = useState<ThumbnailScanItem[]>([]);
   const slideX = useSharedValue(0);
   const slideOpacity = useSharedValue(1);
 
   const reload = useCallback(async () => {
-    setEntries(await getDownloadRanking(db, period));
-  }, [db, period]);
+    try {
+      const result = await getDownloadRanking(period);
+      setEntries(result);
+      setLoadError(false);
+    } catch (err) {
+      console.warn('[RankingScreen] failed to load global ranking', err);
+      setEntries([]);
+      setLoadError(true);
+    }
+  }, [period]);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,6 +84,45 @@ export function RankingScreen() {
     }
     wasDownloadActiveRef.current = downloadActive;
   }, [downloadActive, reload]);
+
+  // Thumbnails are never stored on the server (see RankingThumbnailScanner) —
+  // each device resolves and caches its own copy locally. Whenever the
+  // entry list changes, look up which url_keys are already cached and queue
+  // the rest for background scanning, one page at a time.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const urlKeys = entries.map((entry) => entry.urlKey);
+      const cached = await getCachedThumbnails(db, urlKeys);
+      if (cancelled) {
+        return;
+      }
+      setThumbnails((prev) => {
+        const next = { ...prev };
+        for (const [urlKey, imageUrl] of cached) {
+          next[urlKey] = imageUrl;
+        }
+        return next;
+      });
+      setScanQueue(
+        entries
+          .filter((entry) => !cached.has(entry.urlKey))
+          .map((entry) => ({ urlKey: entry.urlKey, sourceUrl: entry.sourceUrl })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entries, db]);
+
+  const handleThumbnailResolved = useCallback(
+    (urlKey: string, imageUrl: string | null) => {
+      setCachedThumbnail(db, urlKey, imageUrl);
+      setThumbnails((prev) => ({ ...prev, [urlKey]: imageUrl }));
+      setScanQueue((prev) => prev.filter((item) => item.urlKey !== urlKey));
+    },
+    [db],
+  );
 
   const openUrl = (url: string) => {
     openTab(url);
@@ -129,7 +184,7 @@ export function RankingScreen() {
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>ランキング</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-          この端末でのダウンロード統計です
+          アプリ利用者全員でのダウンロード統計です
         </Text>
       </View>
 
@@ -161,19 +216,28 @@ export function RankingScreen() {
         <Animated.View style={[styles.flex, slideStyle]}>
           <FlatList
             data={entries}
-            keyExtractor={(item) => item.sourceUrl}
+            keyExtractor={(item) => item.urlKey}
             contentContainerStyle={styles.listContent}
             renderItem={({ item, index }) => (
-              <RankingRow entry={item} rank={index + 1} onPress={() => openUrl(item.sourceUrl)} />
+              <RankingRow
+                entry={item}
+                rank={index + 1}
+                thumbnailUri={thumbnails[item.urlKey] ?? null}
+                onPress={() => openUrl(item.sourceUrl)}
+              />
             )}
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                この期間のダウンロード実績はありません
+                {loadError
+                  ? '読み込めませんでした。ネットワーク接続を確認してください'
+                  : 'この期間のダウンロード実績はありません'}
               </Text>
             }
           />
         </Animated.View>
       </GestureDetector>
+
+      <RankingThumbnailScanner item={scanQueue[0] ?? null} onResolved={handleThumbnailResolved} />
     </SafeAreaView>
   );
 }
@@ -181,14 +245,15 @@ export function RankingScreen() {
 function RankingRow({
   entry,
   rank,
+  thumbnailUri,
   onPress,
 }: {
   entry: RankingEntry;
   rank: number;
+  thumbnailUri: string | null;
   onPress: () => void;
 }) {
   const { colors } = useAppTheme();
-  const thumbnailUri = entry.thumbnailUri;
 
   return (
     <TouchableOpacity style={[styles.row, { borderBottomColor: colors.border }]} onPress={onPress}>

@@ -1,6 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
 
+import { supabase } from '../services/supabaseClient';
+import { normalizeUrlKey } from '../services/urlNormalization';
+
 export type DownloadHistoryEntry = {
   folderId: string;
   pageUrl: string;
@@ -79,6 +82,30 @@ export async function recordDownloadHistory(
       createdAt,
     );
   });
+
+  // Reports this download to the shared, all-users ranking (Supabase). Kept
+  // in its own try/catch, separate from the local writes above: this is an
+  // optional network call to a secondary feature, and a failure here (no
+  // connectivity, Supabase not configured, etc.) must never be confused with
+  // — or allowed to mask — a real failure of the local bookkeeping above.
+  if (supabase) {
+    try {
+      const { error } = await supabase.rpc('record_download', {
+        p_url_key: normalizeUrlKey(entry.pageUrl),
+        p_source_url: entry.pageUrl,
+        p_page_title: entry.pageTitle,
+        p_image_count: entry.imageCount,
+      });
+      if (error) {
+        throw error;
+      }
+    } catch (err) {
+      console.warn(
+        '[downloadHistoryRepository] failed to report download to global ranking',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
 }
 
 export async function getDownloadHistory(

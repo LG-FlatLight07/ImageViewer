@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -106,6 +106,19 @@ const MIGRATIONS: Record<number, string> = {
     LEFT JOIN download_history dh ON dh.folder_id = f.id
     WHERE COALESCE(dh.page_url, f.source_url) IS NOT NULL
       AND COALESCE(dh.page_url, f.source_url) != '';
+  `,
+  8: `
+    -- The global (all-users) ranking now lives on the server and only ever
+    -- gives us a URL — never an image, since we deliberately don't upload
+    -- thumbnails anywhere (cost + copyright risk). Each device instead
+    -- resolves its own thumbnail by briefly loading the page in a hidden
+    -- WebView and reusing the same first-image detection as the download
+    -- flow, then caches the result here so it only has to do that once.
+    CREATE TABLE IF NOT EXISTS ranking_thumbnail_cache (
+      url_key TEXT PRIMARY KEY NOT NULL,
+      image_url TEXT,
+      cached_at INTEGER NOT NULL
+    );
   `,
 };
 
