@@ -8,7 +8,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 
 import type { BrowserStackParamList } from '../../navigation/types';
 import type { Bookmark } from '../../db/types';
-import { listBookmarks, removeBookmark } from '../../db/bookmarksRepository';
+import { listBookmarks, removeBookmark, renameBookmark } from '../../db/bookmarksRepository';
+import { PromptModal } from '../../components/PromptModal';
 import { useBrowserStore } from '../../store/browserStore';
 import { useAppTheme } from '../../theme/theme';
 
@@ -18,6 +19,7 @@ export function BookmarksScreen() {
   const setUrl = useBrowserStore((state) => state.setUrl);
   const { colors } = useAppTheme();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [renamingBookmark, setRenamingBookmark] = useState<Bookmark | null>(null);
 
   const reload = useCallback(async () => {
     setBookmarks(await listBookmarks(db));
@@ -57,6 +59,14 @@ export function BookmarksScreen() {
               </Text>
             </View>
             <TouchableOpacity
+              onPress={() => setRenamingBookmark(item)}
+              hitSlop={8}
+              accessibilityLabel="rename-bookmark"
+            >
+              <Ionicons name="pencil" size={16} color={colors.secondaryText} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeButton}
               onPress={async () => {
                 await removeBookmark(db, item.id);
                 reload();
@@ -72,6 +82,22 @@ export function BookmarksScreen() {
             ブックマークはありません
           </Text>
         }
+      />
+
+      <PromptModal
+        visible={renamingBookmark !== null}
+        title="表示名を変更"
+        initialValue={renamingBookmark?.title ?? ''}
+        submitLabel="変更"
+        onCancel={() => setRenamingBookmark(null)}
+        onSubmit={async (value) => {
+          if (renamingBookmark) {
+            const trimmed = value.trim();
+            await renameBookmark(db, renamingBookmark.id, trimmed || renamingBookmark.url);
+          }
+          setRenamingBookmark(null);
+          reload();
+        }}
       />
     </SafeAreaView>
   );
@@ -95,6 +121,9 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     fontSize: 15,
+  },
+  closeButton: {
+    marginLeft: 14,
   },
   rowUrl: {
     fontSize: 12,

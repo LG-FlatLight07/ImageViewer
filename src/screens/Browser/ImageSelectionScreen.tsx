@@ -4,14 +4,55 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 
 import type { RootStackParamList } from '../../navigation/types';
 import type { DetectedImage } from '../../services/imageGrouping';
 import { downloadImagesToNewFolder } from '../../services/downloadService';
+import { submitFeedbackMessage } from '../../db/feedbackRepository';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useAppTheme } from '../../theme/theme';
+
+const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
+
+/**
+ * The user only ever sees the generic DOWNLOAD_FAILURE_MESSAGE — the actual
+ * cause (exception detail, or a 0/N success count) is filed as a developer
+ * message instead, reusing the existing local feedback queue so it's ready
+ * to sync once a server exists (see feedbackRepository.ts).
+ */
+async function reportDownloadFailure(
+  db: SQLiteDatabase,
+  context: {
+    pageTitle: string;
+    sourceUrl: string;
+    total: number;
+    successCount?: number;
+    error?: unknown;
+  },
+): Promise<void> {
+  const lines = [
+    '【自動送信】画像ダウンロード失敗レポート',
+    `ページタイトル: ${context.pageTitle}`,
+    `URL: ${context.sourceUrl}`,
+    context.successCount !== undefined
+      ? `成功数: ${context.successCount}/${context.total}枚`
+      : `対象枚数: ${context.total}枚`,
+  ];
+  if (context.error !== undefined) {
+    const detail =
+      context.error instanceof Error
+        ? (context.error.stack ?? context.error.message)
+        : String(context.error);
+    lines.push(`エラー内容: ${detail}`);
+  }
+  try {
+    await submitFeedbackMessage(db, lines.join('\n'));
+  } catch (reportErr) {
+    console.error('[ImageSelectionScreen] failed to report download failure', reportErr);
+  }
+}
 
 const THUMB_SIZE = 100;
 
@@ -76,14 +117,20 @@ export function ImageSelectionScreen() {
     })
       .then((result) => {
         if (result.successCount === 0) {
-          useDownloadStore.getState().finish('すべての画像のダウンロードに失敗しました');
+          reportDownloadFailure(db, {
+            pageTitle,
+            sourceUrl,
+            total: targets.length,
+            successCount: result.successCount,
+          });
+          useDownloadStore.getState().finish(DOWNLOAD_FAILURE_MESSAGE);
           return;
         }
         useDownloadStore.getState().finish(`ダウンロード完了: ${result.successCount}枚`);
       })
       .catch((err) => {
-        console.error('[ImageSelectionScreen] downloadImagesToNewFolder threw', err);
-        useDownloadStore.getState().finish('ダウンロードに失敗しました');
+        reportDownloadFailure(db, { pageTitle, sourceUrl, total: targets.length, error: err });
+        useDownloadStore.getState().finish(DOWNLOAD_FAILURE_MESSAGE);
       });
   };
 

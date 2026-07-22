@@ -108,6 +108,21 @@ export function BrowserScreen() {
     }
   };
 
+  // navState.loading alone can get stuck at true on some sites (long-lived
+  // subresource/websocket/analytics activity, or a navigation delegate quirk
+  // where the final "loading: false" event just never arrives), which left
+  // the reload button stuck showing a "✕" with no way to reload. onLoadEnd
+  // fires once the main-frame document itself finishes (success or error)
+  // regardless of that other activity, so it's a more reliable signal to
+  // clear the icon; a timeout is a last-resort safety net on top of that.
+  useEffect(() => {
+    if (!loading) {
+      return;
+    }
+    const timer = setTimeout(() => setLoading(false), 15000);
+    return () => clearTimeout(timer);
+  }, [loading, setLoading]);
+
   // Captures the page being scanned at the moment the scan is triggered, so
   // that if the user switches tabs or navigates before the async postMessage
   // arrives, the download is still attributed to the page that was actually
@@ -199,6 +214,8 @@ export function BrowserScreen() {
               : { marginTop: BAR_MARGIN + chromeHeight + CHROME_GAP },
           ]}
           onNavigationStateChange={handleNavigationStateChange}
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => setLoading(false)}
           onMessage={handleMessage}
           startInLoadingState
           incognito={disableHistory}

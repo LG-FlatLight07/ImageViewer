@@ -168,7 +168,8 @@ export function SettingsScreen() {
               広告・ポップアップをブロック
             </Text>
             <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
-              広告らしき要素を非表示にし、ポップアップウィンドウを開かないようにします
+              広告らしき要素を非表示にし、ポップアップウィンドウを開かないようにします。{'\n'}
+              サイトが正しく開けないときはオフにしてみてください
             </Text>
           </View>
           <Switch

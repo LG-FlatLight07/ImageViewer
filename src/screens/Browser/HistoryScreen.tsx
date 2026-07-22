@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { BrowserStackParamList } from '../../navigation/types';
 import type { HistoryEntry } from '../../db/types';
 import { clearHistory, deleteHistoryEntry, listHistory } from '../../db/historyRepository';
+import { confirmDelete } from '../../utils/confirmDeleteFolder';
 import { useBrowserStore } from '../../store/browserStore';
 import { useAppTheme } from '../../theme/theme';
 
@@ -30,17 +31,14 @@ export function HistoryScreen() {
   );
 
   const handleClearAll = useCallback(() => {
-    Alert.alert('履歴を削除', 'すべての閲覧履歴を削除しますか?', [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: '削除',
-        style: 'destructive',
-        onPress: async () => {
-          await clearHistory(db);
-          reload();
-        },
+    confirmDelete({
+      title: '履歴を削除',
+      message: 'すべての閲覧履歴を削除しますか?',
+      onConfirm: async () => {
+        await clearHistory(db);
+        reload();
       },
-    ]);
+    });
   }, [db, reload]);
 
   useLayoutEffect(() => {

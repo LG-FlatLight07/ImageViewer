@@ -66,7 +66,7 @@ export const useSettingsStore = create<SettingsState>()(
       folderNameExclusions: [],
       disableHistory: false,
       imageViewerDirection: 'horizontal',
-      adBlockEnabled: true,
+      adBlockEnabled: false,
       autoSelectSequentialImages: true,
       skipDeleteConfirmation: false,
       setSearchEngine: (searchEngine) => set({ searchEngine }),

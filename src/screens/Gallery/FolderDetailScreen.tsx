@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -19,7 +19,7 @@ import {
   setFolderTags,
 } from '../../db/foldersRepository';
 import { deleteFolderFiles, deleteImageFiles, listFolderImageUris } from '../../db/folderImages';
-import { confirmDeleteFolder } from '../../utils/confirmDeleteFolder';
+import { confirmDelete, confirmDeleteFolder } from '../../utils/confirmDeleteFolder';
 import { FolderRow } from '../../components/FolderRow';
 import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
@@ -125,23 +125,16 @@ export function FolderDetailScreen() {
     if (targets.length === 0) {
       return;
     }
-    Alert.alert(
-      '選択した画像を削除しますか?',
-      `${targets.length}枚の画像を削除します。この操作は元に戻せません。`,
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteImageFiles(targets);
-            setSelectionMode(false);
-            setSelectedUris(new Set());
-            reload();
-          },
-        },
-      ],
-    );
+    confirmDelete({
+      title: '選択した画像を削除しますか?',
+      message: `${targets.length}枚の画像を削除します。この操作は元に戻せません。`,
+      onConfirm: async () => {
+        await deleteImageFiles(targets);
+        setSelectionMode(false);
+        setSelectedUris(new Set());
+        reload();
+      },
+    });
   };
 
   const items: ListItem[] = [

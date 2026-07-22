@@ -40,6 +40,10 @@ export async function removeBookmark(db: SQLiteDatabase, id: string): Promise<vo
   await db.runAsync('DELETE FROM bookmarks WHERE id = ?', id);
 }
 
+export async function renameBookmark(db: SQLiteDatabase, id: string, title: string): Promise<void> {
+  await db.runAsync('UPDATE bookmarks SET title = ? WHERE id = ?', title, id);
+}
+
 export async function listBookmarks(
   db: SQLiteDatabase,
   options: { searchQuery?: string } = {},
