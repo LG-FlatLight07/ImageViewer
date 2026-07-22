@@ -5,7 +5,17 @@ import { createFolder } from '../db/foldersRepository';
 import { recordDownloadHistory } from '../db/downloadHistoryRepository';
 
 const DOWNLOAD_CONCURRENCY = 4;
-const INVALID_FILENAME_CHARS = '/\\:*?"<>|';
+// Characters invalid on the filesystem itself (Windows/Android), PLUS
+// characters that are legal in a filename but illegal when left unescaped
+// in a path segment under Android's strict java.net.URI parser (used
+// internally by expo-file-system for existence/permission checks on the
+// directory's file:// URI). `[` `]` `{` `}` `^` and backtick are all valid
+// in an Android filename and common in page titles (e.g. a "[進行中]"
+// status tag), but the native module builds the folder's URI without
+// percent-encoding them, so a folder name containing one throws
+// "IllegalArgumentException: Illegal character in path" the moment the
+// directory is touched — silently turning every download into a failure.
+const INVALID_FILENAME_CHARS = '/\\:*?"<>|[]{}^`#%;';
 
 function applyExclusions(rawName: string, exclusions: string[]): string {
   return exclusions.reduce((name, exclusion) => {
@@ -17,7 +27,7 @@ function applyExclusions(rawName: string, exclusions: string[]): string {
   }, rawName);
 }
 
-function sanitizeFolderName(rawName: string, exclusions: string[] = []): string {
+export function sanitizeFolderName(rawName: string, exclusions: string[] = []): string {
   const withoutExclusions = applyExclusions(rawName, exclusions);
   const withoutInvalidChars = Array.from(withoutExclusions)
     .map((ch) => (ch.charCodeAt(0) < 0x20 || INVALID_FILENAME_CHARS.includes(ch) ? ' ' : ch))
