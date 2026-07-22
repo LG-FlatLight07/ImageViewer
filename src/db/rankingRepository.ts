@@ -116,6 +116,6 @@ export async function getDownloadRanking(
   }
 
   return Array.from(groups.values())
-    .sort((a, b) => b.totalImages - a.totalImages)
+    .sort((a, b) => b.downloadCount - a.downloadCount)
     .slice(0, RANKING_LIMIT);
 }

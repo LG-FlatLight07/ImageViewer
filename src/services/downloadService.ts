@@ -89,7 +89,16 @@ async function downloadWithConcurrency(
       const fileName = `${String(index + 1).padStart(digits, '0')}.${inferExtension(url)}`;
       try {
         const file = new File(directory, fileName);
-        await File.downloadFileAsync(url, file, { idempotent: true, headers });
+        try {
+          await File.downloadFileAsync(url, file, { idempotent: true, headers });
+        } catch {
+          // Some sites reject a synthetic Referer/Origin outright (e.g. a
+          // strict allowlist, or a CDN expecting no referrer at all for
+          // signed/tokenized URLs) even though the same image downloaded
+          // fine with no headers before this was added. Retry bare so a
+          // site that worked before this header logic existed keeps working.
+          await File.downloadFileAsync(url, file, { idempotent: true });
+        }
         successCount += 1;
         if (firstSuccessIndex === -1 || index < firstSuccessIndex) {
           firstSuccessIndex = index;

@@ -215,7 +215,12 @@ function RankingRow({
           {entry.sourceUrl}
         </Text>
       </View>
-      <Text style={[styles.count, { color: colors.primary }]}>{entry.totalImages}枚</Text>
+      <View style={styles.countGroup}>
+        <Text style={[styles.count, { color: colors.primary }]}>{entry.downloadCount}回</Text>
+        <Text style={[styles.countSub, { color: colors.secondaryText }]}>
+          {entry.totalImages}枚
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -355,9 +360,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  countGroup: {
+    alignItems: 'flex-end',
+  },
   count: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  countSub: {
+    fontSize: 11,
+    marginTop: 2,
   },
   emptyText: {
     textAlign: 'center',
