@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -27,6 +28,7 @@ import {
 } from '../../components/RankingThumbnailScanner';
 import { useBrowserStore } from '../../store/browserStore';
 import { useDownloadStore } from '../../store/downloadStore';
+import { FREE_RANKING_VISIBLE, useMonetizationStore } from '../../store/monetizationStore';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import { useAppTheme } from '../../theme/theme';
 
@@ -46,6 +48,7 @@ export function RankingScreen() {
   const rootNavigation = useRootNavigation();
   const openTab = useBrowserStore((state) => state.openTab);
   const downloadActive = useDownloadStore((state) => state.active);
+  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
   const { colors } = useAppTheme();
   const [period, setPeriod] = useState<RankingPeriod>('day');
   const [entries, setEntries] = useState<RankingEntry[]>([]);
@@ -85,6 +88,13 @@ export function RankingScreen() {
     wasDownloadActiveRef.current = downloadActive;
   }, [downloadActive, reload]);
 
+  // Locked (unpurchased, rank > FREE_RANKING_VISIBLE) rows never show a real
+  // thumbnail at all — resolving one would mean loading a page the user
+  // isn't allowed to see clearly yet, for no benefit, so they're excluded
+  // from scanning entirely.
+  const visibleCount = purchasedPremium ? entries.length : FREE_RANKING_VISIBLE;
+  const unlockedEntries = entries.slice(0, visibleCount);
+
   // Thumbnails are never stored on the server (see RankingThumbnailScanner) —
   // each device resolves and caches its own copy locally. Whenever the
   // entry list changes, look up which url_keys are already cached and queue
@@ -92,7 +102,7 @@ export function RankingScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const urlKeys = entries.map((entry) => entry.urlKey);
+      const urlKeys = unlockedEntries.map((entry) => entry.urlKey);
       const cached = await getCachedThumbnails(db, urlKeys);
       if (cancelled) {
         return;
@@ -105,7 +115,7 @@ export function RankingScreen() {
         return next;
       });
       setScanQueue(
-        entries
+        unlockedEntries
           .filter((entry) => !cached.has(entry.urlKey))
           .map((entry) => ({ urlKey: entry.urlKey, sourceUrl: entry.sourceUrl })),
       );
@@ -113,7 +123,9 @@ export function RankingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [entries, db]);
+    // unlockedEntries is derived fresh each render from entries/purchasedPremium — depend on those instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, purchasedPremium, db]);
 
   const handleThumbnailResolved = useCallback(
     (urlKey: string, imageUrl: string | null) => {
@@ -218,14 +230,18 @@ export function RankingScreen() {
             data={entries}
             keyExtractor={(item) => item.urlKey}
             contentContainerStyle={styles.listContent}
-            renderItem={({ item, index }) => (
-              <RankingRow
-                entry={item}
-                rank={index + 1}
-                thumbnailUri={thumbnails[item.urlKey] ?? null}
-                onPress={() => openUrl(item.sourceUrl)}
-              />
-            )}
+            renderItem={({ item, index }) => {
+              const locked = index >= visibleCount;
+              return (
+                <RankingRow
+                  entry={item}
+                  rank={index + 1}
+                  thumbnailUri={thumbnails[item.urlKey] ?? null}
+                  locked={locked}
+                  onPress={locked ? undefined : () => openUrl(item.sourceUrl)}
+                />
+              );
+            }}
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
                 {loadError
@@ -246,31 +262,51 @@ function RankingRow({
   entry,
   rank,
   thumbnailUri,
+  locked,
   onPress,
 }: {
   entry: RankingEntry;
   rank: number;
   thumbnailUri: string | null;
-  onPress: () => void;
+  locked: boolean;
+  onPress?: () => void;
 }) {
   const { colors } = useAppTheme();
 
   return (
-    <TouchableOpacity style={[styles.row, { borderBottomColor: colors.border }]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      disabled={locked}
+    >
       <Text style={[styles.rank, { color: colors.secondaryText }]}>{rank}</Text>
-      {thumbnailUri ? (
-        <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
-      ) : (
-        <View
-          style={[
-            styles.thumbnail,
-            styles.thumbnailPlaceholder,
-            { backgroundColor: colors.surface },
-          ]}
-        >
-          <Ionicons name="image-outline" size={20} color={colors.secondaryText} />
-        </View>
-      )}
+      <View style={styles.thumbnail}>
+        {thumbnailUri && !locked ? (
+          <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
+        ) : (
+          <View
+            style={[
+              styles.thumbnailImage,
+              styles.thumbnailPlaceholder,
+              { backgroundColor: colors.surface },
+            ]}
+          >
+            <Ionicons
+              name={locked ? 'lock-closed' : 'image-outline'}
+              size={20}
+              color={colors.secondaryText}
+            />
+          </View>
+        )}
+        {locked && (
+          <BlurView
+            intensity={80}
+            tint="dark"
+            blurMethod="dimezisBlurViewSdk31Plus"
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+      </View>
       <View style={styles.rowTextGroup}>
         <MarqueeText
           text={entry.displayName}
@@ -279,6 +315,14 @@ function RankingRow({
         <Text style={[styles.url, { color: colors.secondaryText }]} numberOfLines={1}>
           {entry.sourceUrl}
         </Text>
+        {locked && (
+          <BlurView
+            intensity={90}
+            tint="dark"
+            blurMethod="dimezisBlurViewSdk31Plus"
+            style={StyleSheet.absoluteFill}
+          />
+        )}
       </View>
       <View style={styles.countGroup}>
         <Text style={[styles.count, { color: colors.primary }]}>{entry.downloadCount}回</Text>
@@ -408,6 +452,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 8,
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
   },
   thumbnailPlaceholder: {
     alignItems: 'center',
@@ -416,6 +465,8 @@ const styles = StyleSheet.create({
   rowTextGroup: {
     flex: 1,
     marginRight: 8,
+    position: 'relative',
+    overflow: 'hidden',
   },
   hostname: {
     fontSize: 14,

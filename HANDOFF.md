@@ -468,8 +468,94 @@ iOS側は上記が一段落し、Apple Developer Program登録の意思があれ
 
 ---
 
-## 11. タスク管理ツールの状態
+## 11. 収益化(広告・買い切り課金、#135〜#144)
 
-このセッションのタスクリストは #1〜#134 まで全て `completed`。バックエンド導入・
-Android公開準備(ドキュメント整備まで)は完了。実際のPlay Console登録・ビルド提出は
-ユーザー側の操作待ち。次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
+ユーザーとの相談の結果、「報酬型広告(視聴でその日のダウンロード無制限)」+
+「買い切り課金(非消耗型IAP、すべて無制限+ランキング上位50位まで解放)」の
+組み合わせで実装した。
+
+### 11-1. エンタイトルメント(制限・解放状態)の一元管理
+
+`src/store/monetizationStore.ts` が唯一の情報源(AsyncStorageに永続化):
+
+- `purchasedPremium: boolean` — 買い切り課金の有無
+- `rewardedAdDate: string | null` — 広告を最後に視聴した「その日」の日付(端末のローカル日付、
+  UTCではない。ユーザー体験として「日本時間の深夜0時にリセット」を期待されるため)
+- `dailyDownloadDate` / `dailyDownloadUsed` — 当日のダウンロード実行回数(1操作=1カウント。
+  画像の枚数ではなく「保存ボタンを押した回数」で数える)
+
+各種ゲーティング判定(`canStartDownload`, `canCreateNewTag`, `rankingVisibleCount` 等)は
+すべてこのストアの値から計算する純粋関数として実装し、`src/store/__tests__/
+monetizationStore.test.ts` で単体テスト済み。
+
+### 11-2. 各制限の実装箇所
+
+- **ダウンロード1日3回まで**: `ImageSelectionScreen.tsx` の `handleDownload` で
+  `canStartDownload()` を確認し、超過時はAlertで案内(ギャラリーへの導線を明示)。
+  ダウンロード開始時に `consumeDownloadUse()` でカウントを消費(成功/失敗に関わらず
+  1回分を消費— 失敗時の無限リトライによる回数制限の骨抜きを防ぐため)
+- **報酬型広告ボタン**: `RewardedAdButton.tsx`。ギャラリー画面(`FolderListScreen.tsx`)に
+  `ControlGroup`(既存のドラッグ配置レイアウトシステム)の1要素として追加、
+  `defaultAnchor="bottomRight"`。購入済みなら非表示(すでに無制限のため無意味)
+- **タグ全体で5個まで**: `TagEditorModal.tsx`。「アプリ全体で今までに作られた
+  ユニークなタグ名の数」が上限対象で、既存タグの再利用(このフォルダへの追加)は
+  何個でも自由。新規タグ名を追加しようとした時だけ上限チェックする
+- **ランキング上位3位まで/上位50位まで**: `RankingScreen.tsx`。未購入時は
+  rank>3の行の画像・タイトルを `expo-blur` の `BlurView` でモザイク表示し、タップも
+  無効化。ロック中の行はサムネイル自動検出(WebViewスキャン)の対象からも除外し、
+  見えない情報のために無駄なページ読み込みをしない設計とした。
+  `rankingRepository.ts` の取得件数は20→50に拡張(未購入者向けにも「あと何位で
+  何位まで見えるか」を示すため、ロックされた行のデータ自体は取得しておく)
+
+### 11-3. 広告(react-native-google-mobile-ads)・課金(expo-iap)の統合
+
+- どちらもExpo Goに同梱されていないネイティブモジュールのため、**この変更以降
+  Expo Goでの起動が一切できなくなった**(README「実機プレビュー(Dev Client)」に
+  全面改訂済み)。実機・エミュレータともにDev Clientビルドが必須
+- `src/services/rewardedAdService.ts`: `useRewardedAd` フックのラッパー。
+  Platform.OS==='web'の場合はhookを一切呼ばずスタブを返す(react-native-web用の
+  実装が存在しないSDKのため)
+- `src/services/purchaseService.ts` + `src/components/PurchaseSync.tsx`: `expo-iap`
+  の `useIAP` はフックとしてしか提供されないため、App.tsxのルート直下に一度だけ
+  マウントする`PurchaseSync`が接続を保持し、モジュールレベルの「ブリッジ」経由で
+  他画面(設定画面)から`requestPremiumPurchase()`/`restorePremiumPurchases()`を
+  呼べるようにした(複数箇所で`useIAP`を呼んで接続が重複するのを避けるため)
+- 広告ユニットID/商品IDは `.env` 未設定時、それぞれGoogle公式のテスト広告ID/
+  プレースホルダー商品IDにフォールバックする(Supabaseクライアントの
+  「未設定ならnullを返し呼び出し側が握りつぶす」と同じ設計思想)
+
+### 11-4. 開発者機能(実機テスト用コマンド)
+
+設定画面の「開発者機能(実機テスト用)」セクションに3つのボタンを追加
+(`SettingsScreen.tsx`)。いずれも`monetizationStore`を直接書き換えるだけで、
+広告SDK/課金SDKには一切触れないため、Web環境でも(Dev Clientがなくても)動作確認できる。
+
+- 「報酬型広告を視聴したことにする」→ `grantRewardedAdToday()`
+- 「買い切り課金をしたことにする」→ `setPurchasedPremium(true)`
+- 「買い切り課金をしていないことにする」→ `setPurchasedPremium(false)`
+
+### 11-5. サンドボックスでの検証状況
+
+このサンドボックス環境にはAndroid SDK/エミュレータも実機もないため、広告表示・実際の
+購入フローの動作確認は一切できていない(react-native-google-mobile-ads/expo-iapは
+react-native-web向けの実装を持たないネイティブモジュールのため、Web環境でも動作確認
+不可)。`npx tsc --noEmit` / `npx eslint` / `npx jest` は全てパス、
+`monetizationStore.ts` の純粋関数部分は単体テストで担保しているが、**実際にAndroid実機
+またはエミュレータのDev Clientビルドでの一気通貫の確認は未実施**。ユーザー側での
+実機確認を強く推奨する
+
+### 11-6. プライバシーポリシーへの反映
+
+広告SDK(AdMob)・課金SDK(Google Play Billing)の導入に伴い、`PRIVACY.md`に
+「広告(Google AdMob)について」「アプリ内課金について」の2セクションを追加し、
+従来の「広告SDKは組み込んでいない」という記述を削除・修正した(ストア審査に
+出す前に気づけて良かったポイント。今回は自分で見つけて先に直した)
+
+---
+
+## 12. タスク管理ツールの状態
+
+このセッションのタスクリストは #1〜#144 まで全て `completed`。バックエンド導入・
+Android公開準備(ドキュメント整備まで)・収益化(広告・買い切り課金)の実装は完了。
+実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認はユーザー側の操作待ち。
+次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。

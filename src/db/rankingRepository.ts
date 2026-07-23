@@ -13,7 +13,10 @@ export type RankingEntry = {
   lastDownloadedAt: number;
 };
 
-const RANKING_LIMIT = 20;
+// Matches PREMIUM_RANKING_VISIBLE in monetizationStore.ts — the free tier
+// only *displays* the first FREE_RANKING_VISIBLE rows, but still needs the
+// full 50 fetched so the locked/blurred rows below them have real data.
+const RANKING_LIMIT = 50;
 
 /** `ranking_daily_counts.day` is a UTC date (see the `record_download` SQL function) — filter using UTC date strings, not local time. */
 function periodCutoffDate(period: RankingPeriod): string | null {

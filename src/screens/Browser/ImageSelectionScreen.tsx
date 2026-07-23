@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -12,9 +12,16 @@ import { downloadImagesToNewFolder } from '../../services/downloadService';
 import { submitFeedbackMessage } from '../../db/feedbackRepository';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useDownloadStore } from '../../store/downloadStore';
+import {
+  canStartDownload,
+  hasUnlimitedDownloadsToday,
+  useMonetizationStore,
+} from '../../store/monetizationStore';
 import { useAppTheme } from '../../theme/theme';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
+const DOWNLOAD_LIMIT_MESSAGE =
+  '本日の無料ダウンロード回数を使い切りました。ギャラリー画面の「広告を見て本日は無制限に」ボタンから広告を視聴するか、設定画面から買い切り版を購入すると無制限になります。';
 
 /**
  * The user only ever sees the generic DOWNLOAD_FAILURE_MESSAGE — the actual
@@ -103,6 +110,14 @@ export function ImageSelectionScreen() {
     const targets = allImages.filter((image) => selectedIds.has(image.id));
     if (targets.length === 0) {
       return;
+    }
+    const monetizationState = useMonetizationStore.getState();
+    if (!canStartDownload(monetizationState)) {
+      Alert.alert('ダウンロード回数の上限です', DOWNLOAD_LIMIT_MESSAGE);
+      return;
+    }
+    if (!hasUnlimitedDownloadsToday(monetizationState)) {
+      monetizationState.consumeDownloadUse();
     }
     submittingRef.current = true;
     useDownloadStore.getState().start(targets.length);

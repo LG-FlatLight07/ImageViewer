@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -13,7 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { listAllTagNames } from '../db/foldersRepository';
+import { canCreateNewTag, FREE_TAG_LIMIT, useMonetizationStore } from '../store/monetizationStore';
 import { useAppTheme } from '../theme/theme';
+
+const TAG_LIMIT_MESSAGE = `未購入の場合、新しいタグは全体で${FREE_TAG_LIMIT}個まで作成できます(既存のタグは引き続き使えます)。無制限にするには買い切り版を購入してください。`;
 
 type TagEditorModalProps = {
   visible: boolean;
@@ -32,9 +36,14 @@ export function TagEditorModal({
 }: TagEditorModalProps) {
   const { colors } = useAppTheme();
   const db = useSQLiteContext();
+  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
   const [tags, setTags] = useState<string[]>(initialTags);
   const [inputValue, setInputValue] = useState('');
   const [existingTags, setExistingTags] = useState<string[]>([]);
+
+  /** New tag names (not already known anywhere in the app) are subject to the free-tier cap; reusing an existing tag never is. */
+  const canAddNewTagName = (name: string): boolean =>
+    existingTags.includes(name) || canCreateNewTag(purchasedPremium, existingTags.length);
 
   useEffect(() => {
     if (visible) {
@@ -53,7 +62,11 @@ export function TagEditorModal({
   const commitInput = () => {
     const trimmed = inputValue.trim();
     if (trimmed && !tags.includes(trimmed)) {
-      setTags((prev) => [...prev, trimmed]);
+      if (canAddNewTagName(trimmed)) {
+        setTags((prev) => [...prev, trimmed]);
+      } else {
+        Alert.alert('タグの上限です', TAG_LIMIT_MESSAGE);
+      }
     }
     setInputValue('');
   };
@@ -141,12 +154,11 @@ export function TagEditorModal({
             <TouchableOpacity
               style={[styles.button, styles.submitButton, { backgroundColor: colors.primary }]}
               onPress={() => {
+                const trimmed = inputValue.trim();
+                const shouldAppend =
+                  trimmed.length > 0 && !tags.includes(trimmed) && canAddNewTagName(trimmed);
                 commitInput();
-                onSubmit(
-                  inputValue.trim() && !tags.includes(inputValue.trim())
-                    ? [...tags, inputValue.trim()]
-                    : tags,
-                );
+                onSubmit(shouldAppend ? [...tags, trimmed] : tags);
               }}
             >
               <Text style={[styles.buttonText, styles.submitButtonText]}>保存</Text>

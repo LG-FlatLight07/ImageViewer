@@ -27,12 +27,15 @@ import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
+import { RewardedAdButton } from '../../components/RewardedAdButton';
 import { useBrowserStore } from '../../store/browserStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { useMonetizationStore } from '../../store/monetizationStore';
 import { useAppTheme } from '../../theme/theme';
 
 const SEARCH_SCREEN_ID = 'gallery.folderList.search';
 const SORT_SCREEN_ID = 'gallery.folderList.sort';
+const REWARDED_AD_SCREEN_ID = 'gallery.folderList.rewardedAd';
 const MIN_LIST_PADDING_TOP = 80;
 const LIST_RESERVE_GAP = 24;
 
@@ -51,6 +54,7 @@ export function FolderListScreen() {
   const { colors } = useAppTheme();
   const searchAnchor = useLayoutStore((state) => state.layouts[SEARCH_SCREEN_ID]?.anchor);
   const searchAtBottom = searchAnchor === EDGE_BOTTOM_ANCHOR;
+  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
@@ -216,6 +220,12 @@ export function FolderListScreen() {
             <Text style={[styles.sortButtonText, { color: colors.text }]}>{currentSortLabel}</Text>
           </TouchableOpacity>
         </ControlGroup>
+
+        {!purchasedPremium && (
+          <ControlGroup screenId={REWARDED_AD_SCREEN_ID} defaultAnchor="bottomRight">
+            <RewardedAdButton />
+          </ControlGroup>
+        )}
       </DraggableLayoutArea>
 
       <ActionMenuModal

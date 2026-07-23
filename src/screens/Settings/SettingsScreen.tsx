@@ -23,6 +23,14 @@ import {
   type ImageViewerDirection,
   type ThemePreference,
 } from '../../store/settingsStore';
+import {
+  FREE_DAILY_DOWNLOADS,
+  FREE_TAG_LIMIT,
+  getRemainingFreeDownloads,
+  hasUnlimitedDownloadsToday,
+  useMonetizationStore,
+} from '../../store/monetizationStore';
+import { requestPremiumPurchase, restorePremiumPurchases } from '../../services/purchaseService';
 import { useAppTheme } from '../../theme/theme';
 
 const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
@@ -68,6 +76,13 @@ export function SettingsScreen() {
   const [exclusionInput, setExclusionInput] = useState('');
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState(false);
+  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
+  const rewardedAdDate = useMonetizationStore((state) => state.rewardedAdDate);
+  const dailyDownloadDate = useMonetizationStore((state) => state.dailyDownloadDate);
+  const dailyDownloadUsed = useMonetizationStore((state) => state.dailyDownloadUsed);
+  const setPurchasedPremium = useMonetizationStore((state) => state.setPurchasedPremium);
+  const grantRewardedAdToday = useMonetizationStore((state) => state.grantRewardedAdToday);
+  const [purchaseBusy, setPurchaseBusy] = useState(false);
 
   useEffect(() => {
     if (!feedbackToast) {
@@ -89,6 +104,42 @@ export function SettingsScreen() {
       { text: 'いいえ', style: 'cancel' },
       { text: 'はい', style: 'destructive', onPress: resetAll },
     ]);
+  };
+
+  const monetizationEntitlement = {
+    purchasedPremium,
+    rewardedAdDate,
+    dailyDownloadDate,
+    dailyDownloadUsed,
+  };
+  const unlimitedDownloadsToday = hasUnlimitedDownloadsToday(monetizationEntitlement);
+  const remainingFreeDownloads = getRemainingFreeDownloads(monetizationEntitlement);
+
+  const handlePurchase = async () => {
+    setPurchaseBusy(true);
+    try {
+      await requestPremiumPurchase();
+    } catch (err) {
+      Alert.alert(
+        '購入できませんでした',
+        '実機の開発版ビルド(Dev Client)またはストア経由のビルドで、Google Playにログインした状態でお試しください',
+      );
+      console.warn('[SettingsScreen] premium purchase failed', err);
+    } finally {
+      setPurchaseBusy(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setPurchaseBusy(true);
+    try {
+      await restorePremiumPurchases();
+    } catch (err) {
+      Alert.alert('復元できませんでした', 'しばらくしてからもう一度お試しください');
+      console.warn('[SettingsScreen] restore purchases failed', err);
+    } finally {
+      setPurchaseBusy(false);
+    }
   };
 
   return (
@@ -309,6 +360,84 @@ export function SettingsScreen() {
             accessibilityLabel="reset-layout"
           >
             <Text style={styles.resetButtonText}>リセット</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          プレミアム
+        </Text>
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View style={styles.rowTextGroup}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              {purchasedPremium ? '購入済み' : '未購入'}
+            </Text>
+            <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
+              {purchasedPremium
+                ? 'ダウンロード無制限・タグ無制限・ランキング上位50位まで閲覧できます'
+                : `ダウンロードは1日${FREE_DAILY_DOWNLOADS}回、タグは全体で${FREE_TAG_LIMIT}個まで、ランキングは上位3位まで閲覧できます。${'\n'}本日の残り無料ダウンロード回数: ${
+                    unlimitedDownloadsToday ? '無制限' : `${remainingFreeDownloads}回`
+                  }`}
+            </Text>
+          </View>
+        </View>
+        {!purchasedPremium && (
+          <View style={styles.optionRow}>
+            <TouchableOpacity
+              style={[styles.optionButton, { backgroundColor: colors.primary }]}
+              onPress={handlePurchase}
+              disabled={purchaseBusy}
+              accessibilityLabel="purchase-premium"
+            >
+              <Text style={[styles.optionButtonText, styles.optionButtonTextActive]}>
+                買い切り版を購入する
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.optionButton, { backgroundColor: colors.surface }]}
+              onPress={handleRestore}
+              disabled={purchaseBusy}
+              accessibilityLabel="restore-premium"
+            >
+              <Text style={[styles.optionButtonText, { color: colors.secondaryText }]}>
+                購入を復元する
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          開発者機能(実機テスト用)
+        </Text>
+        <Text style={[styles.rowDescription, { color: colors.secondaryText }]}>
+          実際に広告を視聴・購入することなく、収益化まわりの表示や制限を確認するためのコマンドです。
+        </Text>
+        <View style={styles.optionRow}>
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.surface }]}
+            onPress={grantRewardedAdToday}
+            accessibilityLabel="dev-simulate-rewarded-ad"
+          >
+            <Text style={[styles.optionButtonText, { color: colors.text }]}>
+              報酬型広告を視聴したことにする
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.surface }]}
+            onPress={() => setPurchasedPremium(true)}
+            accessibilityLabel="dev-simulate-purchased"
+          >
+            <Text style={[styles.optionButtonText, { color: colors.text }]}>
+              買い切り課金をしたことにする
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.surface }]}
+            onPress={() => setPurchasedPremium(false)}
+            accessibilityLabel="dev-simulate-not-purchased"
+          >
+            <Text style={[styles.optionButtonText, { color: colors.text }]}>
+              買い切り課金をしていないことにする
+            </Text>
           </TouchableOpacity>
         </View>
 
