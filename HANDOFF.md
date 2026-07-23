@@ -459,9 +459,9 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ggilmEu19iELkFWMWNmunw_0V8_nSNz
 2. アプリの新規作成・ストア掲載情報の入力(`STORE_LISTING.md`参照)
 3. プライバシーポリシーを公開URLとして登録(GitHubのファイル表示URLで可)
 4. 実機またはAndroidエミュレータでの操作画面のスクリーンショット撮影
-5. `npx eas login` → `npx eas build --profile production --platform android`
+5. `npx eas-cli login` → `npx eas-cli build --profile production --platform android`
 6. (自動提出する場合)Google Cloudでサービスアカウントを作成しPlay Consoleに権限付与、
-   JSON鍵を `google-service-account.json` として配置 → `npx eas submit --platform android`
+   JSON鍵を `google-service-account.json` として配置 → `npx eas-cli submit --platform android`
 7. 内部テスト→クローズドテスト→本番公開、の順にPlay Console上で審査・公開を進める
 
 iOS側は上記が一段落し、Apple Developer Program登録の意思があれば別途着手する想定。

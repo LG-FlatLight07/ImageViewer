@@ -71,13 +71,13 @@ Expo Goの代わりに、このプロジェクト専用のDev Clientアプリを
 2. 無料のExpoアカウントを作成し、CLIでログイン
 
    ```bash
-   npx eas login
+   npx eas-cli login
    ```
 
 3. Android用のDev Clientをクラウドでビルド(初回は数分〜十数分かかります)
 
    ```bash
-   npx eas build --profile development --platform android
+   npx eas-cli build --profile development --platform android
    ```
 
    ビルド完了後にターミナルへ表示されるURL(またはQRコード)から、実機にAPKを
@@ -170,7 +170,7 @@ src/
 
 - **ユニットテスト**: `src/services/**/__tests__` に画像検出・URL解析ロジックのテストを配置(`npm test`)
 - **EAS Build**: `eas.json` にdevelopment/preview/productionのビルドプロファイルを用意
-  (`npx eas build --profile production --platform android|ios` 等で利用)
+  (`npx eas-cli build --profile production --platform android|ios` 等で利用)
 - **プライバシーポリシー**: [`PRIVACY.md`](./PRIVACY.md) を参照。閲覧履歴・ブックマーク・
   ダウンロード画像は端末内にのみ保存されますが、ダウンロードランキング機能のため
   URL・タイトル・ダウンロード枚数(個人を特定できる情報は含まない)をSupabaseへ送信するほか、
@@ -200,15 +200,15 @@ src/
 6. **データセーフティの入力**: 「収集するデータの種類」を聞かれるので、
    [`STORE_LISTING.md`](./STORE_LISTING.md) のデータセーフティ回答案を参照して入力
 7. **コンテンツレーティングの質問に回答**(Play Console上のアンケート形式)
-8. **アプリのビルド**: `npx eas build --profile production --platform android`
-   (初回は `npx eas login` でExpoアカウントへのログインが必要。Androidの署名鍵は
+8. **アプリのビルド**: `npx eas-cli build --profile production --platform android`
+   (初回は `npx eas-cli login` でExpoアカウントへのログインが必要。Androidの署名鍵は
    EASが自動生成・管理します)
 9. **Play Consoleへの提出**:
    - 手動: ビルド完了後にダウンロードされる `.aab` ファイルをPlay Consoleの
      「テスト」→「内部テスト」トラックなどに手動アップロード
    - 自動: Google Cloudでサービスアカウントを作成しPlay Consoleに権限を付与、
      ダウンロードしたJSON鍵を `google-service-account.json` としてプロジェクト直下に置き
-     (`.gitignore` 済み、絶対にコミットしないこと)、`npx eas submit --platform android`
+     (`.gitignore` 済み、絶対にコミットしないこと)、`npx eas-cli submit --platform android`
      を実行(`eas.json` の `submit.production.android` を参照)
 10. **内部テスト→本番公開**: まずは内部テスト/クローズドテストで動作確認してから、
     Play Consoleの審査を経て段階的に本番公開する
