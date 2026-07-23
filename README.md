@@ -77,6 +77,7 @@ Expo Goの代わりに、このプロジェクト専用のDev Clientアプリを
 3. Android用のDev Clientをクラウドでビルド(初回は数分〜十数分かかります)
 
    ```bash
+   $env:EAS_NO_VCS=1
    npx eas-cli build --profile development --platform android
    ```
 
