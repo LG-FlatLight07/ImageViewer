@@ -9,6 +9,7 @@ import { LayoutEditBanner } from './src/components/layout/LayoutEditBanner';
 import { DownloadProgressBar } from './src/components/DownloadProgressBar';
 import { DownloadCompleteToast } from './src/components/DownloadCompleteToast';
 import { PurchaseSync } from './src/components/PurchaseSync';
+import { AppBackgroundBlur } from './src/components/AppBackgroundBlur';
 import { initializeAds } from './src/services/adsInit';
 import { useAppTheme } from './src/theme/theme';
 
@@ -31,6 +32,7 @@ export default function App() {
         </DatabaseProvider>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       </SafeAreaProvider>
+      <AppBackgroundBlur />
     </GestureHandlerRootView>
   );
 }

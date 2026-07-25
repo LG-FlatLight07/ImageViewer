@@ -114,3 +114,21 @@ export async function getDownloadRanking(period: RankingPeriod): Promise<Ranking
       lastDownloadedAt: group.lastDownloadedAt,
     }));
 }
+
+/**
+ * Wipes `ranking_daily_counts` for ALL users — there is no per-user
+ * ownership to scope a reset to, since the table only ever stores anonymous
+ * aggregate counts (see PRIVACY.md). Intended for clearing out test data
+ * accumulated during development; never call this without being certain
+ * that's what's wanted (see the confirmation dialog at the call site in
+ * SettingsScreen.tsx).
+ */
+export async function resetServerDownloadHistory(): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabaseが設定されていません');
+  }
+  const { error } = await supabase.rpc('reset_download_history');
+  if (error) {
+    throw error;
+  }
+}

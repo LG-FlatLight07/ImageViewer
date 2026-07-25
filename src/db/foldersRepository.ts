@@ -128,6 +128,19 @@ export async function listFolders(
          )`
       : '';
 
+  // A search query or tag filter means the user is looking for a folder
+  // anywhere in the hierarchy, not just at the current level — restricting
+  // to `parent_id IS options.parentId` would silently hide matches that
+  // live inside a subfolder. Only plain (unfiltered) browsing is scoped to
+  // one level.
+  const isFiltering = search !== '' || tags.length > 0;
+  const parentClause = isFiltering ? '1=1' : 'f.parent_id IS ?';
+  const params: (string | null)[] = [];
+  if (!isFiltering) {
+    params.push(options.parentId);
+  }
+  params.push(search, searchPattern, searchPattern, ...tags);
+
   const rows = await db.getAllAsync<FolderRow>(
     `SELECT f.id, f.name, f.parent_id, f.dir_path,
             COALESCE(dh.page_url, f.source_url) as source_url,
@@ -135,18 +148,14 @@ export async function listFolders(
      FROM folders f
      LEFT JOIN download_history dh ON dh.folder_id = f.id
      ${joinExtra}
-     WHERE f.parent_id IS ?
+     WHERE ${parentClause}
        AND (? = '' OR f.name LIKE ? OR EXISTS (
          SELECT 1 FROM folder_tags ft2 JOIN tags t2 ON t2.id = ft2.tag_id
          WHERE ft2.folder_id = f.id AND t2.name LIKE ?
        ))
        ${tagClause}
      ${orderByClause}`,
-    options.parentId,
-    search,
-    searchPattern,
-    searchPattern,
-    ...tags,
+    ...params,
   );
 
   return attachTags(db, rows.map(mapFolderRow));

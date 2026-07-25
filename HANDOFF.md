@@ -551,11 +551,92 @@ react-native-web向けの実装を持たないネイティブモジュールの�
 従来の「広告SDKは組み込んでいない」という記述を削除・修正した(ストア審査に
 出す前に気づけて良かったポイント。今回は自分で見つけて先に直した)
 
+### 11-7. 実機テストで発覚し修正した問題(#135〜#144の直後)
+
+Dev Clientビルド後の実機確認で、以下が判明・修正済み:
+
+- **react-native-google-mobile-ads v16.4.0が要求するplay-services-ads 25.4.0が、
+  プロジェクトのKotlinバージョン(2.1.20)と非互換でGradleビルドが失敗**する既知の不具合
+  ([invertase/react-native-google-mobile-ads#863](https://github.com/invertase/react-native-google-mobile-ads/issues/863))。
+  `play-services-ads 25.0.0`を要求する`v16.3.4`に`--save-exact`で固定して回避
+  (`^`を外し、npmが再度25.4.0系へ引き上げないようにしている)
+- ユーザーのPC上での`git pull`が、`expo install`系コマンドが自動生成する
+  `package.json`/`package-lock.json`/`app.json`のローカル変更と繰り返し衝突した。
+  対処は毎回同じ: `git checkout -- <対象ファイル> && git pull && npm install`
+- Windows特有の`eas build`失敗(`git clone ... exited with non-zero code: 128`)は
+  `$env:EAS_NO_VCS=1`を設定することでgit経由のアップロードを回避して解決
+  (READMEに追記済み)
+
+## 12. 実機テストのフィードバックを反映した追加修正(#145〜#151)
+
+- **残りダウンロード回数の表示**: `ImageSelectionScreen.tsx`のフッターに
+  「本日のダウンロード可能回数: 残り◯回 / 無制限」を表示
+- **サーバー側ダウンロード履歴のリセット**: `rankingRepository.resetServerDownloadHistory()`
+  が呼ぶSupabase RPC `reset_download_history()`(下記SQL参照)を新設。設定画面の
+  「開発者機能」に確認ダイアログ付きボタンとして追加。**全ユーザー共通のグローバル
+  ランキングを完全に削除する破壊的操作**であり、開発者機能セクション自体が現状
+  誰でも操作できる状態のため、本番公開前に扱いを再検討すべき(§13参照)
+
+  ```sql
+  create or replace function reset_download_history()
+    returns void language plpgsql security definer set search_path = public as $$
+    begin
+      delete from ranking_daily_counts;
+    end; $$;
+  grant execute on function reset_download_history() to anon;
+  ```
+
+  (ユーザーがSupabase SQL Editorで実行する必要あり。私からは実データへの影響を
+  避けるため直接実行していない)
+
+- **ネストしたフォルダの検索不具合を修正**: `foldersRepository.listFolders()`が
+  検索クエリ・タグフィルタが有効な時は`parent_id`による絞り込みを外し、
+  階層に関わらず全フォルダを対象に検索するよう修正(以前は`parent_id IS null`で
+  常にトップレベルのみに絞られており、サブフォルダの名前/タグがヒットしなかった)
+- **「Premium機能」への呼称統一**: UI上の「買い切り版」「買い切り課金」の文言を
+  すべて「Premium機能」に統一(`SettingsScreen.tsx`, `TagEditorModal.tsx`,
+  `ImageSelectionScreen.tsx`, `RankingScreen.tsx`)。README/PRIVACY.mdの技術的な
+  説明(課金モデルとしての「買い切り課金」)はそのまま残し、UI文言のみ変更
+- **ランキングのブラー表示を強化**: `expo-blur`の`blurMethod`を
+  `dimezisBlurViewSdk31Plus`(Android 12+限定)から`dimezisBlurView`(Android全対応、
+  やや重いが確実に効く)に変更。未購入時、4位以降のブラーの最前面に
+  「Premium機能を解禁で、ランキング上位50位まで見られます」という固定カード
+  (画面下部・スクロールに追従しない)を追加し、タップで設定画面のPremiumセクションへ
+  遷移できるようにした
+- **アプリバックグラウンド時の全画面ブラー**: `AppBackgroundBlur.tsx`(新規)を
+  `App.tsx`の最上位に追加。`AppState`の変化を監視し、`active`以外の状態
+  (タスクスイッチャー表示中・他アプリにフォーカスが移った時など)では
+  画面全体に`BlurView`を被せる。**注意点**: Androidのタスクスイッチャー(最近使った
+  アプリ一覧)のサムネイルはOSがバックグラウンド遷移時に独自に撮るスクリーンショットで、
+  このコンポーネントの制御が及ばない別レイヤーのため、このブラーだけでは
+  サムネイル自体を隠せない可能性がある(遷移アニメーション中や、フォアグラウンド復帰時の
+  一瞬は確実に効く)。より確実に隠したい場合は`expo-screen-capture`の
+  `preventScreenCaptureAsync()`(スクリーンショット自体を禁止しサムネイルを黒塗りにする)
+  を追加する対応が考えられるが、今回は新規ネイティブモジュール追加(再ビルド発生)を
+  避けるため見送った
+
+### 12-1. サンドボックスでの検証状況(#145〜#151)
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest` は全てパス。Web版のバンドルビルドと
+Playwrightでの目視確認も実施(ランキング画面はSupabaseへのリクエストをPlaywrightの
+`page.route()`でモックしたダミーデータで表示確認 — 実データベースには一切書き込んでいない)。
+Premium誘導カードの表示・ロック行の見た目は確認済みだが、**実際のAndroid実機での
+`dimezisBlurView`によるブラー強度、およびタスクスイッチャーでの見え方は未確認**
+(Web版のBlurView実装はネイティブAndroidと挙動が異なる)。ユーザー側での実機確認を推奨する
+
 ---
 
-## 12. タスク管理ツールの状態
+## 13. タスク管理ツールの状態
 
-このセッションのタスクリストは #1〜#144 まで全て `completed`。バックエンド導入・
-Android公開準備(ドキュメント整備まで)・収益化(広告・買い切り課金)の実装は完了。
-実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認はユーザー側の操作待ち。
+このセッションのタスクリストは #1〜#151 まで全て `completed`。バックエンド導入・
+Android公開準備・収益化(広告・買い切り課金)の実装・実機テストで判明した問題の修正まで完了。
+実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認・
+`reset_download_history`のSupabase側SQL実行はユーザー側の操作待ち。
 次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
+
+### 今後の検討事項(未着手)
+
+- 「開発者機能」セクション(設定画面)は現状、本番ビルドでも誰でも操作できてしまう。
+  特に「サーバーのダウンロード履歴をリセット」は全ユーザーのランキングを破壊できる
+  ため、本番公開前に非表示化・削除・またはPINロック等の保護を検討すべき
+- タスクスイッチャーのサムネイル自体を隠したい場合は`expo-screen-capture`の検討

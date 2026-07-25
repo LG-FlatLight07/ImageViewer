@@ -31,6 +31,7 @@ import {
   useMonetizationStore,
 } from '../../store/monetizationStore';
 import { requestPremiumPurchase, restorePremiumPurchases } from '../../services/purchaseService';
+import { resetServerDownloadHistory } from '../../db/rankingRepository';
 import { useAppTheme } from '../../theme/theme';
 
 const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
@@ -83,6 +84,7 @@ export function SettingsScreen() {
   const setPurchasedPremium = useMonetizationStore((state) => state.setPurchasedPremium);
   const grantRewardedAdToday = useMonetizationStore((state) => state.grantRewardedAdToday);
   const [purchaseBusy, setPurchaseBusy] = useState(false);
+  const [resetHistoryBusy, setResetHistoryBusy] = useState(false);
 
   useEffect(() => {
     if (!feedbackToast) {
@@ -140,6 +142,32 @@ export function SettingsScreen() {
     } finally {
       setPurchaseBusy(false);
     }
+  };
+
+  const handleResetServerDownloadHistory = () => {
+    Alert.alert(
+      'サーバーのダウンロード履歴をリセットしますか?',
+      '全ユーザー共通のランキングデータが完全に削除されます(元に戻せません)。開発中のテストデータを消す用途以外では使用しないでください。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: 'リセットする',
+          style: 'destructive',
+          onPress: async () => {
+            setResetHistoryBusy(true);
+            try {
+              await resetServerDownloadHistory();
+              Alert.alert('リセットしました', 'サーバーのダウンロード履歴を削除しました');
+            } catch (err) {
+              Alert.alert('リセットできませんでした', 'しばらくしてからもう一度お試しください');
+              console.warn('[SettingsScreen] failed to reset server download history', err);
+            } finally {
+              setResetHistoryBusy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -364,7 +392,7 @@ export function SettingsScreen() {
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
-          プレミアム
+          Premium機能
         </Text>
         <View style={[styles.row, { borderBottomColor: colors.border }]}>
           <View style={styles.rowTextGroup}>
@@ -389,7 +417,7 @@ export function SettingsScreen() {
               accessibilityLabel="purchase-premium"
             >
               <Text style={[styles.optionButtonText, styles.optionButtonTextActive]}>
-                買い切り版を購入する
+                Premium機能を購入する
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -427,7 +455,7 @@ export function SettingsScreen() {
             accessibilityLabel="dev-simulate-purchased"
           >
             <Text style={[styles.optionButtonText, { color: colors.text }]}>
-              買い切り課金をしたことにする
+              Premium機能を購入したことにする
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -436,7 +464,17 @@ export function SettingsScreen() {
             accessibilityLabel="dev-simulate-not-purchased"
           >
             <Text style={[styles.optionButtonText, { color: colors.text }]}>
-              買い切り課金をしていないことにする
+              Premium機能を購入していないことにする
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.surface }]}
+            onPress={handleResetServerDownloadHistory}
+            disabled={resetHistoryBusy}
+            accessibilityLabel="dev-reset-server-download-history"
+          >
+            <Text style={[styles.optionButtonText, { color: '#c0392b' }]}>
+              サーバーのダウンロード履歴をリセット
             </Text>
           </TouchableOpacity>
         </View>

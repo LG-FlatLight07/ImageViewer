@@ -17,7 +17,7 @@ import { listAllTagNames } from '../db/foldersRepository';
 import { canCreateNewTag, FREE_TAG_LIMIT, useMonetizationStore } from '../store/monetizationStore';
 import { useAppTheme } from '../theme/theme';
 
-const TAG_LIMIT_MESSAGE = `未購入の場合、新しいタグは全体で${FREE_TAG_LIMIT}個まで作成できます(既存のタグは引き続き使えます)。無制限にするには買い切り版を購入してください。`;
+const TAG_LIMIT_MESSAGE = `未購入の場合、新しいタグは全体で${FREE_TAG_LIMIT}個まで作成できます(既存のタグは引き続き使えます)。無制限にするにはPremium機能を購入してください。`;
 
 type TagEditorModalProps = {
   visible: boolean;

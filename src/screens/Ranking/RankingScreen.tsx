@@ -253,6 +253,24 @@ export function RankingScreen() {
         </Animated.View>
       </GestureDetector>
 
+      {!purchasedPremium && entries.length > visibleCount && (
+        <View style={styles.premiumCtaWrapper} pointerEvents="box-none">
+          <View style={[styles.premiumCtaCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="lock-open-outline" size={20} color={colors.primary} />
+            <Text style={[styles.premiumCtaText, { color: colors.text }]}>
+              Premium機能を解禁で、ランキング上位50位まで見られます
+            </Text>
+            <TouchableOpacity
+              style={[styles.premiumCtaButton, { backgroundColor: colors.primary }]}
+              onPress={() => rootNavigation.navigate('MainTabs', { screen: 'Settings' } as never)}
+              accessibilityLabel="go-to-premium-settings"
+            >
+              <Text style={styles.premiumCtaButtonText}>Premium機能を見る</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <RankingThumbnailScanner item={scanQueue[0] ?? null} onResolved={handleThumbnailResolved} />
     </SafeAreaView>
   );
@@ -302,7 +320,7 @@ function RankingRow({
           <BlurView
             intensity={80}
             tint="dark"
-            blurMethod="dimezisBlurViewSdk31Plus"
+            blurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
           />
         )}
@@ -319,7 +337,7 @@ function RankingRow({
           <BlurView
             intensity={90}
             tint="dark"
-            blurMethod="dimezisBlurViewSdk31Plus"
+            blurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
           />
         )}
@@ -490,5 +508,39 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     marginTop: 60,
+  },
+  premiumCtaWrapper: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    alignItems: 'center',
+  },
+  premiumCtaCard: {
+    width: '100%',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  premiumCtaText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  premiumCtaButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  premiumCtaButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

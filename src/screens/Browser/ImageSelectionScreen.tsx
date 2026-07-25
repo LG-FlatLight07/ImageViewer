@@ -14,6 +14,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import {
   canStartDownload,
+  getRemainingFreeDownloads,
   hasUnlimitedDownloadsToday,
   useMonetizationStore,
 } from '../../store/monetizationStore';
@@ -21,7 +22,7 @@ import { useAppTheme } from '../../theme/theme';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
 const DOWNLOAD_LIMIT_MESSAGE =
-  '本日の無料ダウンロード回数を使い切りました。ギャラリー画面の「広告を見て本日は無制限に」ボタンから広告を視聴するか、設定画面から買い切り版を購入すると無制限になります。';
+  '本日の無料ダウンロード回数を使い切りました。ギャラリー画面の「広告を見て本日は無制限に」ボタンから広告を視聴するか、設定画面からPremium機能を購入すると無制限になります。';
 
 /**
  * The user only ever sees the generic DOWNLOAD_FAILURE_MESSAGE — the actual
@@ -70,7 +71,21 @@ export function ImageSelectionScreen() {
   const { colors } = useAppTheme();
   const folderNameExclusions = useSettingsStore((state) => state.folderNameExclusions);
   const autoSelectSequentialImages = useSettingsStore((state) => state.autoSelectSequentialImages);
+  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
+  const rewardedAdDate = useMonetizationStore((state) => state.rewardedAdDate);
+  const dailyDownloadDate = useMonetizationStore((state) => state.dailyDownloadDate);
+  const dailyDownloadUsed = useMonetizationStore((state) => state.dailyDownloadUsed);
   const { pageTitle, sourceUrl, primaryGroup, otherImages } = route.params;
+
+  const monetizationEntitlement = {
+    purchasedPremium,
+    rewardedAdDate,
+    dailyDownloadDate,
+    dailyDownloadUsed,
+  };
+  const remainingDownloadsLabel = hasUnlimitedDownloadsToday(monetizationEntitlement)
+    ? '無制限'
+    : `残り${getRemainingFreeDownloads(monetizationEntitlement)}回`;
 
   const allImages = useMemo<DetectedImage[]>(
     () => [...(primaryGroup?.images ?? []), ...otherImages],
@@ -227,6 +242,9 @@ export function ImageSelectionScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Text style={[styles.remainingDownloads, { color: colors.secondaryText }]}>
+          本日のダウンロード可能回数: {remainingDownloadsLabel}
+        </Text>
         <TouchableOpacity
           style={[
             styles.downloadButton,
@@ -335,6 +353,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#ddd',
+  },
+  remainingDownloads: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   downloadButton: {
     backgroundColor: '#4c8bf5',
