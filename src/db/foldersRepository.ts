@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
 
-import type { Folder, FolderSortKey, FolderWithTags, Tag } from './types';
+import {
+  DEFAULT_SORT_DIRECTIONS,
+  type Folder,
+  type FolderSortDirection,
+  type FolderSortKey,
+  type FolderWithTags,
+  type Tag,
+} from './types';
 
 type FolderRow = {
   id: string;
@@ -94,6 +101,8 @@ export async function listFolders(
   options: {
     parentId: string | null;
     sortKey: FolderSortKey;
+    /** Defaults to DEFAULT_SORT_DIRECTIONS[sortKey] when omitted. */
+    sortDirection?: FolderSortDirection;
     searchQuery?: string;
     /** Only folders tagged with at least one of these (OR) are returned. */
     tags?: string[];
@@ -102,6 +111,8 @@ export async function listFolders(
   const search = options.searchQuery?.trim() ?? '';
   const searchPattern = `%${search}%`;
   const tags = options.tags?.filter((name) => name.trim().length > 0) ?? [];
+  const dir =
+    (options.sortDirection ?? DEFAULT_SORT_DIRECTIONS[options.sortKey]) === 'asc' ? 'ASC' : 'DESC';
 
   let orderByClause: string;
   let selectExtra = '';
@@ -109,14 +120,13 @@ export async function listFolders(
   if (options.sortKey === 'tagName') {
     selectExtra =
       ', (SELECT MIN(t.name) FROM folder_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.folder_id = f.id) as min_tag_name';
-    orderByClause =
-      'ORDER BY (min_tag_name IS NULL) ASC, min_tag_name COLLATE NOCASE ASC, f.name COLLATE NOCASE ASC';
+    orderByClause = `ORDER BY (min_tag_name IS NULL) ASC, min_tag_name COLLATE NOCASE ${dir}, f.name COLLATE NOCASE ASC`;
   } else if (options.sortKey === 'createdAt') {
-    orderByClause = 'ORDER BY f.created_at DESC';
+    orderByClause = `ORDER BY f.created_at ${dir}`;
   } else if (options.sortKey === 'viewCount') {
-    orderByClause = 'ORDER BY f.view_count DESC, f.created_at DESC';
+    orderByClause = `ORDER BY f.view_count ${dir}, f.created_at DESC`;
   } else {
-    orderByClause = 'ORDER BY f.name COLLATE NOCASE ASC';
+    orderByClause = `ORDER BY f.name COLLATE NOCASE ${dir}`;
   }
 
   const tagPlaceholders = tags.map(() => '?').join(',');

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
+import { BlurTargetView, BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -290,6 +290,7 @@ function RankingRow({
   onPress?: () => void;
 }) {
   const { colors } = useAppTheme();
+  const blurTargetRef = useRef<View>(null);
 
   return (
     <TouchableOpacity
@@ -298,47 +299,49 @@ function RankingRow({
       disabled={locked}
     >
       <Text style={[styles.rank, { color: colors.secondaryText }]}>{rank}</Text>
-      <View style={styles.thumbnail}>
-        {thumbnailUri && !locked ? (
-          <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
-        ) : (
-          <View
-            style={[
-              styles.thumbnailImage,
-              styles.thumbnailPlaceholder,
-              { backgroundColor: colors.surface },
-            ]}
-          >
-            <Ionicons
-              name={locked ? 'lock-closed' : 'image-outline'}
-              size={20}
-              color={colors.secondaryText}
-            />
+      <View style={styles.blurRegion}>
+        {/* dimezisBlurView only actually blurs the content inside a
+            BlurTargetView it's pointed at via `blurTarget` — without it, it
+            silently degrades to a plain translucent overlay (looks like a
+            dark box, nothing blurred). */}
+        <BlurTargetView ref={blurTargetRef} style={styles.blurTargetContent}>
+          <View style={styles.thumbnail}>
+            {thumbnailUri && !locked ? (
+              <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
+            ) : (
+              <View
+                style={[
+                  styles.thumbnailImage,
+                  styles.thumbnailPlaceholder,
+                  { backgroundColor: colors.surface },
+                ]}
+              >
+                <Ionicons
+                  name={locked ? 'lock-closed' : 'image-outline'}
+                  size={20}
+                  color={colors.secondaryText}
+                />
+              </View>
+            )}
           </View>
-        )}
+          <View style={styles.rowTextGroup}>
+            <MarqueeText
+              text={entry.displayName}
+              textStyle={[styles.hostname, { color: colors.text }]}
+            />
+            <Text style={[styles.url, { color: colors.secondaryText }]} numberOfLines={1}>
+              {entry.sourceUrl}
+            </Text>
+          </View>
+        </BlurTargetView>
         {locked && (
           <BlurView
-            intensity={80}
+            blurTarget={blurTargetRef}
+            intensity={100}
             tint="dark"
             blurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
-          />
-        )}
-      </View>
-      <View style={styles.rowTextGroup}>
-        <MarqueeText
-          text={entry.displayName}
-          textStyle={[styles.hostname, { color: colors.text }]}
-        />
-        <Text style={[styles.url, { color: colors.secondaryText }]} numberOfLines={1}>
-          {entry.sourceUrl}
-        </Text>
-        {locked && (
-          <BlurView
-            intensity={90}
-            tint="dark"
-            blurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
           />
         )}
       </View>
@@ -465,6 +468,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  blurRegion: {
+    flex: 1,
+    position: 'relative',
+    marginRight: 8,
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  blurTargetContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   thumbnail: {
     width: 44,
     height: 44,
@@ -482,8 +496,6 @@ const styles = StyleSheet.create({
   },
   rowTextGroup: {
     flex: 1,
-    marginRight: 8,
-    position: 'relative',
     overflow: 'hidden',
   },
   hostname: {

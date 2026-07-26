@@ -19,6 +19,15 @@ export type FolderWithTags = Folder & {
 };
 
 export type FolderSortKey = 'name' | 'createdAt' | 'tagName' | 'viewCount';
+export type FolderSortDirection = 'asc' | 'desc';
+
+/** The direction each sort key reads most naturally in when first selected. */
+export const DEFAULT_SORT_DIRECTIONS: Record<FolderSortKey, FolderSortDirection> = {
+  name: 'asc',
+  createdAt: 'desc',
+  tagName: 'asc',
+  viewCount: 'desc',
+};
 
 export type HistoryEntry = {
   id: string;

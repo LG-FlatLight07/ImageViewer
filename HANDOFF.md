@@ -626,11 +626,60 @@ Premium誘導カードの表示・ロック行の見た目は確認済みだが�
 
 ---
 
+## 14. 実機テスト第2弾のフィードバックを反映した修正(#152〜#156)
+
+- **ランキングのブラーが効いていなかった問題を修正**: `expo-blur`公式ドキュメントを
+  調査した結果、Androidの`blurMethod="dimezisBlurView"`は**単体では実際のガウスぼかしを
+  適用せず、半透明の黒いオーバーレイに劣化する**ことが判明。正しくは、ぼかし対象の
+  コンテンツを`<BlurTargetView ref={targetRef}>`で包み、`<BlurView>`側に
+  `blurTarget={targetRef}`を渡す必要がある(`blurMethod`だけでは不十分)。
+  `RankingScreen.tsx`の`RankingRow`を修正し、サムネイル+テキスト部分を
+  `BlurTargetView`でラップして`blurTarget`を指定するよう変更。**JSのみの変更のため
+  再ビルド不要**(`git pull`してMetroが再読み込みすれば反映される)
+- **同じ根本原因が`AppBackgroundBlur.tsx`(アプリ非アクティブ時の全画面ブラー)にも
+  存在していたため、併せて修正**: `App.tsx`のアプリ全体を`BlurTargetView`で包み、
+  そのrefを`AppBackgroundBlur`に`target`propとして渡し、`BlurView`に`blurTarget`を
+  指定するよう変更。これもJSのみの変更で再ビルド不要
+- **Premium機能の説明をアプリ内に追加**: `AppGuideScreen.tsx`(設定→「アプリの使い方・
+  仕様を見る」)に新セクション「Premium機能」を追加。無料枠の制限
+  (`FREE_DAILY_DOWNLOADS`/`FREE_TAG_LIMIT`/`FREE_RANKING_VISIBLE`)、報酬型広告視聴で
+  当日のダウンロード無制限になること、Premium機能購入で全制限が解除されること
+  (`PREMIUM_RANKING_VISIBLE`まで閲覧可)、購入・復元の導線を明記。既存の「ランキング」
+  セクションの古い記述(「TOP20」「この端末での統計のみ」など、Supabase移行前の
+  古い仕様のまま放置されていた)も現行仕様に合わせて修正
+- **ギャラリーのソート昇順/降順トグルを追加**: `FolderSortDirection`型
+  (`'asc' | 'desc'`)と、各ソートキーの自然な初期方向を定義する
+  `DEFAULT_SORT_DIRECTIONS`を`src/db/types.ts`に新設。`foldersRepository.listFolders()`
+  に`sortDirection`オプションを追加し、各`ORDER BY`句の向きを動的に切り替え可能に。
+  `FolderListScreen.tsx`の既存ソートボタンの隣に、方向だけをワンタップで反転できる
+  小さな矢印ボタン(↑/↓)を追加(ソートキーメニューを開き直す必要がない)。
+  ソートキーを変更した際は、新しいキーのデフォルト方向にリセットされる
+- **サーバーのダウンロード履歴リセットが「リセットできませんでした」になる件**:
+  このセッションのサンドボックスでは未解決。最有力の原因は、§12で提示した
+  `reset_download_history` SQL関数がまだユーザーのSupabaseプロジェクトの
+  SQL Editorで実行されていないこと(未定義の関数をRPC呼び出しすると
+  PostgRESTが404を返す)。`SettingsScreen.tsx`側のエラーハンドリングは
+  `console.warn('[SettingsScreen] failed to reset server download history', err)`で
+  実際のエラー内容をログに残しているだけで、Alert文言は常に汎用メッセージのため、
+  次回はブラウザの開発者ツール(Web版)またはadb logcat/Metroログで実際の
+  エラーメッセージを確認するのが最短経路
+
+### 12-2. サンドボックスでの検証状況(#152〜#156)
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`(31件)全てパス。Playwright(Web版)で
+ソート方向トグルの見た目切り替えと、新しいPremium機能ガイドセクションの表示を
+目視確認済み(スクリーンショットのみ、実データへの書き込みなし)。**ブラー修正自体は
+Web版のBlurView実装がAndroidと異なるため、実際のAndroid実機での見え方は未確認**。
+ユーザー側での実機確認を推奨する
+
+---
+
 ## 13. タスク管理ツールの状態
 
-このセッションのタスクリストは #1〜#151 まで全て `completed`。バックエンド導入・
-Android公開準備・収益化(広告・買い切り課金)の実装・実機テストで判明した問題の修正まで完了。
-実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認・
+このセッションのタスクリストは #1〜#156 まで全て `completed`(#152のみ、
+Supabase側SQL実行というユーザー操作待ちのため実質的に保留)。バックエンド導入・
+Android公開準備・収益化(広告・買い切り課金)の実装・実機テストで判明した問題の修正
+(2回分)まで完了。実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認・
 `reset_download_history`のSupabase側SQL実行はユーザー側の操作待ち。
 次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
 

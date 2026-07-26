@@ -8,7 +8,12 @@ import { useSQLiteContext } from 'expo-sqlite';
 
 import type { GalleryStackParamList } from '../../navigation/types';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
-import type { FolderSortKey, FolderWithTags } from '../../db/types';
+import {
+  DEFAULT_SORT_DIRECTIONS,
+  type FolderSortDirection,
+  type FolderSortKey,
+  type FolderWithTags,
+} from '../../db/types';
 import {
   createFolder,
   deleteFolder,
@@ -57,6 +62,9 @@ export function FolderListScreen() {
   const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
+  const [sortDirection, setSortDirection] = useState<FolderSortDirection>(
+    DEFAULT_SORT_DIRECTIONS.createdAt,
+  );
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -72,11 +80,12 @@ export function FolderListScreen() {
     const result = await listFolders(db, {
       parentId: null,
       sortKey,
+      sortDirection,
       searchQuery,
       tags: selectedTags,
     });
     setFolders(result);
-  }, [db, sortKey, searchQuery, selectedTags]);
+  }, [db, sortKey, sortDirection, searchQuery, selectedTags]);
 
   useFocusEffect(
     useCallback(() => {
@@ -115,6 +124,7 @@ export function FolderListScreen() {
   };
 
   const currentSortLabel = SORT_OPTIONS.find((option) => option.key === sortKey)?.label ?? '';
+  const toggleSortDirection = () => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={[]}>
@@ -211,14 +221,29 @@ export function FolderListScreen() {
         </ControlGroup>
 
         <ControlGroup screenId={SORT_SCREEN_ID} defaultAnchor="bottomLeft">
-          <TouchableOpacity
-            style={[styles.sortButton, { backgroundColor: colors.surface }]}
-            onPress={() => setSortMenuVisible(true)}
-            accessibilityLabel="open-sort-menu"
-          >
-            <Ionicons name="swap-vertical" size={14} color={colors.text} />
-            <Text style={[styles.sortButtonText, { color: colors.text }]}>{currentSortLabel}</Text>
-          </TouchableOpacity>
+          <View style={styles.sortRow}>
+            <TouchableOpacity
+              style={[styles.sortButton, { backgroundColor: colors.surface }]}
+              onPress={() => setSortMenuVisible(true)}
+              accessibilityLabel="open-sort-menu"
+            >
+              <Ionicons name="swap-vertical" size={14} color={colors.text} />
+              <Text style={[styles.sortButtonText, { color: colors.text }]}>
+                {currentSortLabel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortDirectionButton, { backgroundColor: colors.surface }]}
+              onPress={toggleSortDirection}
+              accessibilityLabel="toggle-sort-direction"
+            >
+              <Ionicons
+                name={sortDirection === 'asc' ? 'arrow-up' : 'arrow-down'}
+                size={14}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+          </View>
         </ControlGroup>
 
         {!purchasedPremium && (
@@ -233,7 +258,10 @@ export function FolderListScreen() {
         onClose={() => setSortMenuVisible(false)}
         actions={SORT_OPTIONS.map((option) => ({
           label: option.key === sortKey ? `✓ ${option.label}` : option.label,
-          onPress: () => setSortKey(option.key),
+          onPress: () => {
+            setSortKey(option.key);
+            setSortDirection(DEFAULT_SORT_DIRECTIONS[option.key]);
+          },
         }))}
       />
 
@@ -370,6 +398,11 @@ const styles = StyleSheet.create({
   tagSuggestionText: {
     fontSize: 11,
   },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,6 +414,14 @@ const styles = StyleSheet.create({
   },
   sortButtonText: {
     fontSize: 12,
+  },
+  sortDirectionButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#f1f1f1',
   },
   list: {
     flex: 1,
