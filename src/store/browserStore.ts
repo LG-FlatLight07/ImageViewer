@@ -1,6 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
-export const DEFAULT_URL = 'https://www.google.com';
+import { TOP_PAGE_URL } from '../services/topPage';
 
 export type BrowserTab = {
   id: string;
@@ -18,12 +20,12 @@ export type BrowserTab = {
 
 let tabIdCounter = 0;
 
-function createTab(url: string = DEFAULT_URL): BrowserTab {
+function createTab(url: string = TOP_PAGE_URL): BrowserTab {
   tabIdCounter += 1;
   return {
     id: `tab-${Date.now()}-${tabIdCounter}`,
     url,
-    inputValue: url,
+    inputValue: url === TOP_PAGE_URL ? '' : url,
     currentUrl: url,
     title: '',
     canGoBack: false,
@@ -39,8 +41,10 @@ function updateTab(tabs: BrowserTab[], id: string, patch: Partial<BrowserTab>): 
 type BrowserState = {
   tabs: BrowserTab[];
   activeTabId: string;
-  /** True once `applyHomeUrlIfPristine` has run (or been skipped as unnecessary) for this app launch. */
-  homeUrlApplied: boolean;
+  /** URL of whichever tab was last active, kept up to date continuously so the "前回のタブ" startup option can restore it after a full app restart (never the built-in top page). */
+  lastActiveUrl: string | null;
+  /** True once `applyStartupPage` has run (or been skipped as unnecessary) for this app launch. */
+  startupPageApplied: boolean;
   openTab: (url?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string) => void;
@@ -53,93 +57,108 @@ type BrowserState = {
     currentUrl: string;
   }) => void;
   setLoading: (loading: boolean) => void;
+  recordLastActiveUrl: (url: string) => void;
   /**
    * The very first tab is created at module load time, before the
-   * persisted search-engine setting has finished rehydrating, so it always
-   * starts on DEFAULT_URL. Call this once settings have rehydrated to swap
-   * the still-untouched initial tab over to the configured engine's home
-   * page; it's a no-op once the user has navigated anywhere.
+   * persisted settings (search engine / startup page mode) and this
+   * store's own persisted `lastActiveUrl` have finished rehydrating, so it
+   * always starts on the built-in top page. Call this once both have
+   * rehydrated to swap the still-untouched initial tab over to the
+   * configured startup page; it's a no-op once the user has navigated
+   * anywhere.
    */
-  applyHomeUrlIfPristine: (url: string) => void;
+  applyStartupPage: (url: string) => void;
 };
 
 const initialTab = createTab();
 
-export const useBrowserStore = create<BrowserState>((set) => ({
-  tabs: [initialTab],
-  activeTabId: initialTab.id,
-  homeUrlApplied: false,
+export const useBrowserStore = create<BrowserState>()(
+  persist(
+    (set) => ({
+      tabs: [initialTab],
+      activeTabId: initialTab.id,
+      lastActiveUrl: null,
+      startupPageApplied: false,
 
-  openTab: (url = DEFAULT_URL) => {
-    const tab = createTab(url);
-    set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }));
-  },
+      openTab: (url = TOP_PAGE_URL) => {
+        const tab = createTab(url);
+        set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }));
+      },
 
-  closeTab: (id) => {
-    set((state) => {
-      const remaining = state.tabs.filter((tab) => tab.id !== id);
-      if (remaining.length === 0) {
-        const fresh = createTab();
-        return { tabs: [fresh], activeTabId: fresh.id };
-      }
-      if (state.activeTabId !== id) {
-        return { tabs: remaining };
-      }
-      const closedIndex = state.tabs.findIndex((tab) => tab.id === id);
-      const nextActive = remaining[Math.max(0, closedIndex - 1)] ?? remaining[0];
-      return { tabs: remaining, activeTabId: nextActive.id };
-    });
-  },
+      closeTab: (id) => {
+        set((state) => {
+          const remaining = state.tabs.filter((tab) => tab.id !== id);
+          if (remaining.length === 0) {
+            const fresh = createTab();
+            return { tabs: [fresh], activeTabId: fresh.id };
+          }
+          if (state.activeTabId !== id) {
+            return { tabs: remaining };
+          }
+          const closedIndex = state.tabs.findIndex((tab) => tab.id === id);
+          const nextActive = remaining[Math.max(0, closedIndex - 1)] ?? remaining[0];
+          return { tabs: remaining, activeTabId: nextActive.id };
+        });
+      },
 
-  setActiveTabId: (activeTabId) => set({ activeTabId }),
+      setActiveTabId: (activeTabId) => set({ activeTabId }),
 
-  setUrl: (url) =>
-    set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url, currentUrl: url }),
-    })),
+      setUrl: (url) =>
+        set((state) => ({
+          tabs: updateTab(state.tabs, state.activeTabId, { url, inputValue: url, currentUrl: url }),
+        })),
 
-  setInputValue: (inputValue) =>
-    set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { inputValue }),
-    })),
+      setInputValue: (inputValue) =>
+        set((state) => ({
+          tabs: updateTab(state.tabs, state.activeTabId, { inputValue }),
+        })),
 
-  setNavigationState: ({ canGoBack, canGoForward, title, currentUrl }) =>
-    set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, {
-        canGoBack,
-        canGoForward,
-        title,
-        currentUrl,
-      }),
-    })),
+      setNavigationState: ({ canGoBack, canGoForward, title, currentUrl }) =>
+        set((state) => ({
+          tabs: updateTab(state.tabs, state.activeTabId, {
+            canGoBack,
+            canGoForward,
+            title,
+            currentUrl,
+          }),
+        })),
 
-  setLoading: (loading) =>
-    set((state) => ({
-      tabs: updateTab(state.tabs, state.activeTabId, { loading }),
-    })),
+      setLoading: (loading) =>
+        set((state) => ({
+          tabs: updateTab(state.tabs, state.activeTabId, { loading }),
+        })),
 
-  applyHomeUrlIfPristine: (url) =>
-    set((state) => {
-      if (state.homeUrlApplied) {
-        return state;
-      }
-      const isPristine =
-        state.tabs.length === 1 &&
-        state.tabs[0].url === DEFAULT_URL &&
-        state.tabs[0].inputValue === DEFAULT_URL;
-      if (!isPristine || url === DEFAULT_URL) {
-        return { ...state, homeUrlApplied: true };
-      }
-      return {
-        homeUrlApplied: true,
-        tabs: updateTab(state.tabs, state.activeTabId, {
-          url,
-          inputValue: url,
-          currentUrl: url,
+      recordLastActiveUrl: (url) => set({ lastActiveUrl: url }),
+
+      applyStartupPage: (url) =>
+        set((state) => {
+          if (state.startupPageApplied) {
+            return state;
+          }
+          const isPristine =
+            state.tabs.length === 1 &&
+            state.tabs[0].url === TOP_PAGE_URL &&
+            state.tabs[0].inputValue === '';
+          if (!isPristine || url === TOP_PAGE_URL) {
+            return { ...state, startupPageApplied: true };
+          }
+          return {
+            startupPageApplied: true,
+            tabs: updateTab(state.tabs, state.activeTabId, {
+              url,
+              inputValue: url,
+              currentUrl: url,
+            }),
+          };
         }),
-      };
     }),
-}));
+    {
+      name: 'browser-store',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ lastActiveUrl: state.lastActiveUrl }),
+    },
+  ),
+);
 
 export function useActiveBrowserTab(): BrowserTab {
   const tabs = useBrowserStore((state) => state.tabs);

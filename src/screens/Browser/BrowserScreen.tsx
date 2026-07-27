@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
@@ -14,8 +14,9 @@ import { ControlGroup, BAR_MARGIN } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore, useActiveBrowserTab } from '../../store/browserStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { SEARCH_ENGINES, useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
+import { TOP_PAGE_URL, buildTopPageHtml } from '../../services/topPage';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
 import { AD_BLOCK_SCRIPT } from '../../services/adBlock';
@@ -56,8 +57,13 @@ export function BrowserScreen() {
 
   const [bookmarked, setBookmarked] = useState(false);
   const [chromeHeight, setChromeHeight] = useState(0);
+  const isTopPage = url === TOP_PAGE_URL;
+  const topPageHtml = useMemo(() => buildTopPageHtml(searchEngine), [searchEngine]);
 
   useEffect(() => {
+    if (isTopPage) {
+      return;
+    }
     let cancelled = false;
     isBookmarked(db, currentUrl).then((result) => {
       if (!cancelled) {
@@ -67,24 +73,57 @@ export function BrowserScreen() {
     return () => {
       cancelled = true;
     };
-  }, [db, currentUrl]);
+  }, [db, currentUrl, isTopPage]);
+  const displayBookmarked = isTopPage ? false : bookmarked;
+
+  // Continuously track the active tab's real (non-top-page) URL so the
+  // "前回のタブ" startup option can restore it after a full app restart —
+  // there's no reliable way to run cleanup code on abrupt process kill, so
+  // this is kept current on every navigation instead.
+  useEffect(() => {
+    if (currentUrl && currentUrl !== TOP_PAGE_URL) {
+      useBrowserStore.getState().recordLastActiveUrl(currentUrl);
+    }
+  }, [currentUrl]);
 
   useEffect(() => {
-    const applyHomeUrl = () => {
-      const engine = SEARCH_ENGINES.find((e) => e.key === useSettingsStore.getState().searchEngine);
-      if (engine) {
-        useBrowserStore.getState().applyHomeUrlIfPristine(engine.homeUrl);
+    let settingsReady = useSettingsStore.persist.hasHydrated();
+    let browserReady = useBrowserStore.persist.hasHydrated();
+    const unsubscribes: (() => void)[] = [];
+
+    const tryApplyStartupPage = () => {
+      if (!settingsReady || !browserReady) {
+        return;
       }
+      const { startupPageMode, startupPageUrl, searchEngine: engine } = useSettingsStore.getState();
+      let target = TOP_PAGE_URL;
+      if (startupPageMode === 'custom' && startupPageUrl.trim()) {
+        target = resolveInputToUrl(startupPageUrl, engine) || TOP_PAGE_URL;
+      } else if (startupPageMode === 'lastTab') {
+        target = useBrowserStore.getState().lastActiveUrl ?? TOP_PAGE_URL;
+      }
+      useBrowserStore.getState().applyStartupPage(target);
     };
-    if (useSettingsStore.persist.hasHydrated()) {
-      applyHomeUrl();
-      return;
+
+    if (!settingsReady) {
+      unsubscribes.push(
+        useSettingsStore.persist.onFinishHydration(() => {
+          settingsReady = true;
+          tryApplyStartupPage();
+        }),
+      );
     }
-    const unsubscribe = useSettingsStore.persist.onFinishHydration(() => {
-      applyHomeUrl();
-      unsubscribe();
-    });
-    return unsubscribe;
+    if (!browserReady) {
+      unsubscribes.push(
+        useBrowserStore.persist.onFinishHydration(() => {
+          browserReady = true;
+          tryApplyStartupPage();
+        }),
+      );
+    }
+    tryApplyStartupPage();
+
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   const handleSubmit = () => {
@@ -95,6 +134,17 @@ export function BrowserScreen() {
   };
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
+    if (isTopPage) {
+      // The built-in top page is loaded via `source={{ html }}`, so WebView
+      // reports "about:blank" for it. Only a real navigation away from it
+      // (e.g. the top page's own search form submitting) should promote
+      // this tab to a normal, addressable one — otherwise `source` would
+      // keep resetting back to the top-page HTML on every re-render.
+      if (navState.url && !navState.url.startsWith('about:')) {
+        setUrl(navState.url);
+      }
+      return;
+    }
     setNavigationState({
       canGoBack: navState.canGoBack,
       canGoForward: navState.canGoForward,
@@ -139,6 +189,9 @@ export function BrowserScreen() {
   };
 
   const handleToggleBookmark = async () => {
+    if (isTopPage) {
+      return;
+    }
     if (bookmarked) {
       await removeBookmarkByUrl(db, currentUrl);
       setBookmarked(false);
@@ -149,8 +202,7 @@ export function BrowserScreen() {
   };
 
   const handleNewTab = () => {
-    const engine = SEARCH_ENGINES.find((e) => e.key === searchEngine);
-    openTab(engine?.homeUrl);
+    openTab(TOP_PAGE_URL);
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -176,7 +228,7 @@ export function BrowserScreen() {
       key="url-bar"
       value={inputValue}
       loading={loading}
-      bookmarked={bookmarked}
+      bookmarked={displayBookmarked}
       onChangeValue={setInputValue}
       onSubmit={handleSubmit}
       onReload={() => (loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload())}
@@ -206,7 +258,7 @@ export function BrowserScreen() {
         <WebView
           key={activeTabId}
           ref={webViewRef}
-          source={{ uri: url }}
+          source={isTopPage ? { html: topPageHtml } : { uri: url }}
           style={[
             styles.webview,
             chromeAtBottom

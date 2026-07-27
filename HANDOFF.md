@@ -674,14 +674,62 @@ Web版のBlurView実装がAndroidと異なるため、実際のAndroid実機で�
 
 ---
 
+## 15. オリジナルのブラウザートップページと起動時ページ設定(#157〜#159)
+
+- **ストア掲載スクリーンショット対策**: これまでアプリ起動時・新しいタブを開いた時は
+  設定中の検索エンジン(Google/Bing/Yahoo!/DuckDuckGo)のホームページをそのまま
+  WebViewで開いていたが、これだと他社サービスの画面がストア掲載スクリーンショットに
+  映り込みかねないため、`src/services/topPage.ts`(新規)にアプリ独自の
+  「トップページ」を実装。検索窓+「検索を始める」の文言のみのシンプルなHTMLを
+  `imageviewer://home`というセンチネル文字列で表現し、`BrowserScreen.tsx`が
+  `tab.url === TOP_PAGE_URL`の時だけWebViewの`source`を`{ uri }`ではなく
+  `{ html: buildTopPageHtml(searchEngine) }`に切り替える。検索フォームの送信先URLは
+  設定中の検索エンジンの`searchUrl()`から動的に組み立てるため、検索エンジン設定は
+  今まで通り効く
+  - **`source`切り替えの罠**: `tab.url`をセンチネルのまま据え置くと、re-render毎に
+    `buildTopPageHtml()`が新しい文字列を返しWebViewが検索結果ページへの遷移を
+    上書き・巻き戻ししてしまう。これを避けるため、`handleNavigationStateChange`で
+    「トップページ表示中に`about:`以外のURLへ実際に遷移した(=検索フォーム送信)」
+    ことを検知した時だけ`setUrl(navState.url)`を呼び、そのタブを通常の
+    アドレス付きタブへ「昇格」させる一度きりの処理を追加
+- **設定タブに「起動時に開くページ」を追加**: `settingsStore.ts`に
+  `startupPageMode`(`'topPage' | 'lastTab' | 'custom'`、既定`'topPage'`)と
+  `startupPageUrl`を追加。「前回のタブ」を選んだ場合に備え、`browserStore.ts`を
+  `zustand/persist`化し、アクティブタブの`currentUrl`が変わるたびに
+  `lastActiveUrl`をAsyncStorageへ書き続ける(アプリの強制終了時にクリーンアップ
+  コードを確実に走らせる手段が無いため、常時追跡する方式にした)。アプリ起動時、
+  設定ストアとブラウザーストア双方のrehydrate完了を待ってから、モードに応じて
+  最初のタブのURLをトップページ/前回のURL/指定URLへ差し替える
+  (`applyStartupPage`、旧`applyHomeUrlIfPristine`を置き換え)
+  - **新しいタブは常にトップページ**: 「起動時に開くページ」設定はアプリ起動時のみに
+    効き、タブバーの「+」から新しいタブを開いた時は常にこのトップページを開く
+    (ユーザーの要望通り、両者を意図的に分離)
+- **ブックマークの汚染防止**: トップページ表示中は`isBookmarked`のDB問い合わせを
+  スキップし、★ボタンを押しても何もしない(`imageviewer://home`という無意味な
+  URLがブックマークテーブルに紛れ込むのを防止)
+- `BrowserTabBar.tsx`の`tabLabel()`にトップページの特別扱いを追加し、
+  タブ見出しに`imageviewer://home`がそのまま表示されないようにした
+
+### 15-1. サンドボックスでの検証状況(#157〜#159)
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`(31件)全てパス。設定画面の
+「起動時に開くページ」UI(3モードの切替・URL入力欄の出し入れ)はPlaywright(Web版)で
+目視確認済み。**`react-native-webview`はWeb実装を持たないため、肝心のトップページ
+(検索窓+「検索を始める」)自体と、検索フォーム送信後の実際の遷移挙動はこの
+サンドボックスでは一度も確認できていない**(既知の制約、README「Androidエミュレータ
+でのプレビュー」参照)。実機、またはAndroidエミュレータでの確認を推奨する
+
+---
+
 ## 13. タスク管理ツールの状態
 
-このセッションのタスクリストは #1〜#156 まで全て `completed`(#152のみ、
+このセッションのタスクリストは #1〜#159 まで全て `completed`(#152のみ、
 Supabase側SQL実行というユーザー操作待ちのため実質的に保留)。バックエンド導入・
 Android公開準備・収益化(広告・買い切り課金)の実装・実機テストで判明した問題の修正
-(2回分)まで完了。実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認・
-`reset_download_history`のSupabase側SQL実行はユーザー側の操作待ち。
-次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
+(2回分)・オリジナルのブラウザートップページと起動時ページ設定の追加まで完了。
+実際のPlay Console登録・ビルド提出・AdMob/IAPの実機動作確認・
+`reset_download_history`のSupabase側SQL実行・トップページの実機確認は
+ユーザー側の操作待ち。次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
 
 ### 今後の検討事項(未着手)
 

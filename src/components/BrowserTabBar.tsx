@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 
 import type { BrowserTab } from '../store/browserStore';
+import { TOP_PAGE_URL } from '../services/topPage';
 import { useAppTheme } from '../theme/theme';
 
 type BrowserTabBarProps = {
@@ -16,6 +17,9 @@ type BrowserTabBarProps = {
 function tabLabel(tab: BrowserTab): string {
   if (tab.title) {
     return tab.title;
+  }
+  if (tab.url === TOP_PAGE_URL) {
+    return '新しいタブ';
   }
   try {
     return new URL(tab.url).hostname || tab.url;

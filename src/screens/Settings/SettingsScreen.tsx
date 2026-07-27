@@ -21,6 +21,7 @@ import {
   SEARCH_ENGINES,
   useSettingsStore,
   type ImageViewerDirection,
+  type StartupPageMode,
   type ThemePreference,
 } from '../../store/settingsStore';
 import {
@@ -45,6 +46,12 @@ const VIEWER_DIRECTION_OPTIONS: { key: ImageViewerDirection; label: string }[] =
   { key: 'vertical', label: '縦スライド' },
 ];
 
+const STARTUP_PAGE_OPTIONS: { key: StartupPageMode; label: string }[] = [
+  { key: 'topPage', label: 'トップページ' },
+  { key: 'lastTab', label: '前回のタブ' },
+  { key: 'custom', label: 'URLを指定' },
+];
+
 const FEEDBACK_TOAST_MS = 3000;
 
 export function SettingsScreen() {
@@ -57,6 +64,10 @@ export function SettingsScreen() {
   const resetAll = useLayoutStore((state) => state.resetAll);
   const searchEngine = useSettingsStore((state) => state.searchEngine);
   const setSearchEngine = useSettingsStore((state) => state.setSearchEngine);
+  const startupPageMode = useSettingsStore((state) => state.startupPageMode);
+  const setStartupPageMode = useSettingsStore((state) => state.setStartupPageMode);
+  const startupPageUrl = useSettingsStore((state) => state.startupPageUrl);
+  const setStartupPageUrl = useSettingsStore((state) => state.setStartupPageUrl);
   const themePreference = useSettingsStore((state) => state.themePreference);
   const setThemePreference = useSettingsStore((state) => state.setThemePreference);
   const disableHistory = useSettingsStore((state) => state.disableHistory);
@@ -197,6 +208,59 @@ export function SettingsScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
+          起動時に開くページ
+        </Text>
+        <View style={styles.optionRow}>
+          {STARTUP_PAGE_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.optionButton,
+                { backgroundColor: colors.surface },
+                startupPageMode === option.key && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setStartupPageMode(option.key)}
+              accessibilityLabel={`startup-page-mode-${option.key}`}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  { color: colors.secondaryText },
+                  startupPageMode === option.key && styles.optionButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={[styles.rowDescription, { color: colors.secondaryText, marginTop: 6 }]}>
+          {startupPageMode === 'lastTab'
+            ? 'アプリを終了する直前にアクティブだったタブを、次回起動時に開きます。'
+            : startupPageMode === 'custom'
+              ? '起動時に開くURLを入力してください。'
+              : '検索窓だけのシンプルなページを起動時に開きます。'}
+          {'\n'}
+          (新しいタブを開いたときは、この設定に関わらず常にトップページが開きます)
+        </Text>
+        {startupPageMode === 'custom' && (
+          <TextInput
+            style={[
+              styles.exclusionInput,
+              { borderColor: colors.border, color: colors.text, marginTop: 8 },
+            ]}
+            value={startupPageUrl}
+            onChangeText={setStartupPageUrl}
+            placeholder="https://example.com"
+            placeholderTextColor={colors.secondaryText}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            accessibilityLabel="startup-page-url-input"
+          />
+        )}
 
         <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginTop: 24 }]}>
           テーマ

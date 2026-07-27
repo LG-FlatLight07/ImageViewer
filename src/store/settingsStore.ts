@@ -5,6 +5,8 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 export type SearchEngineKey = 'google' | 'bing' | 'yahoo' | 'duckduckgo';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ImageViewerDirection = 'horizontal' | 'vertical';
+/** Which page opens on app launch: the built-in top page, the tab that was active when the app was last closed, or a fixed URL. */
+export type StartupPageMode = 'topPage' | 'lastTab' | 'custom';
 
 export const SEARCH_ENGINES: {
   key: SearchEngineKey;
@@ -47,6 +49,9 @@ type SettingsState = {
   adBlockEnabled: boolean;
   autoSelectSequentialImages: boolean;
   skipDeleteConfirmation: boolean;
+  startupPageMode: StartupPageMode;
+  /** Only used when startupPageMode === 'custom'. */
+  startupPageUrl: string;
   setSearchEngine: (engine: SearchEngineKey) => void;
   setThemePreference: (preference: ThemePreference) => void;
   addFolderNameExclusion: (text: string) => void;
@@ -56,6 +61,8 @@ type SettingsState = {
   setAdBlockEnabled: (enabled: boolean) => void;
   setAutoSelectSequentialImages: (enabled: boolean) => void;
   setSkipDeleteConfirmation: (skip: boolean) => void;
+  setStartupPageMode: (mode: StartupPageMode) => void;
+  setStartupPageUrl: (url: string) => void;
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -69,6 +76,8 @@ export const useSettingsStore = create<SettingsState>()(
       adBlockEnabled: false,
       autoSelectSequentialImages: true,
       skipDeleteConfirmation: false,
+      startupPageMode: 'topPage',
+      startupPageUrl: '',
       setSearchEngine: (searchEngine) => set({ searchEngine }),
       setThemePreference: (themePreference) => set({ themePreference }),
       addFolderNameExclusion: (text) =>
@@ -89,6 +98,8 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoSelectSequentialImages: (autoSelectSequentialImages) =>
         set({ autoSelectSequentialImages }),
       setSkipDeleteConfirmation: (skipDeleteConfirmation) => set({ skipDeleteConfirmation }),
+      setStartupPageMode: (startupPageMode) => set({ startupPageMode }),
+      setStartupPageUrl: (startupPageUrl) => set({ startupPageUrl }),
     }),
     {
       name: 'settings-store',
