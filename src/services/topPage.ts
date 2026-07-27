@@ -75,7 +75,6 @@ export function buildTopPageHtml(searchEngine: SearchEngineKey): string {
     align-items: center;
     justify-content: center;
   }
-  .engine { margin-top: 16px; font-size: 12px; opacity: 0.45; }
 </style>
 </head>
 <body>
@@ -97,7 +96,6 @@ export function buildTopPageHtml(searchEngine: SearchEngineKey): string {
       />
       <button type="submit" aria-label="検索">➜</button>
     </form>
-    <div class="engine">検索エンジン: ${engine.label}</div>
   </div>
   <script>
     document.getElementById('search-form').addEventListener('submit', function (e) {
