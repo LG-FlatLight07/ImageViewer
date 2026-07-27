@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -26,7 +25,6 @@ import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 import { useAppTheme } from '../../theme/theme';
 
-const BUTTONS_SCREEN_ID = 'browser.buttons';
 const CHROME_SCREEN_ID = 'browser.chrome';
 const CHROME_GAP = 16;
 
@@ -229,9 +227,14 @@ export function BrowserScreen() {
       value={inputValue}
       loading={loading}
       bookmarked={displayBookmarked}
+      canGoBack={canGoBack}
+      canGoForward={canGoForward}
       onChangeValue={setInputValue}
       onSubmit={handleSubmit}
       onReload={() => (loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload())}
+      onGoBack={() => webViewRef.current?.goBack()}
+      onGoForward={() => webViewRef.current?.goForward()}
+      onSaveImages={handleSaveImages}
       onToggleBookmark={handleToggleBookmark}
       onOpenBookmarks={() => navigation.navigate('Bookmarks')}
       onOpenHistory={() => navigation.navigate('History')}
@@ -277,34 +280,6 @@ export function BrowserScreen() {
         />
         {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
-        <ControlGroup screenId={BUTTONS_SCREEN_ID}>
-          <TouchableOpacity
-            style={styles.toolbarButton}
-            disabled={!canGoBack}
-            onPress={() => webViewRef.current?.goBack()}
-            accessibilityLabel="go-back"
-          >
-            <Ionicons name="arrow-back" size={22} color={canGoBack ? '#333' : '#ccc'} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toolbarButton}
-            disabled={!canGoForward}
-            onPress={() => webViewRef.current?.goForward()}
-            accessibilityLabel="go-forward"
-          >
-            <Ionicons name="arrow-forward" size={22} color={canGoForward ? '#333' : '#ccc'} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toolbarButton}
-            onPress={handleSaveImages}
-            accessibilityLabel="save-images"
-          >
-            <Ionicons name="download-outline" size={22} color="#333" />
-          </TouchableOpacity>
-        </ControlGroup>
-
         <ControlGroup
           screenId={CHROME_SCREEN_ID}
           variant="bar"
@@ -349,18 +324,5 @@ const styles = StyleSheet.create({
   },
   chromeGap: {
     height: 10,
-  },
-  toolbarButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
   },
 });

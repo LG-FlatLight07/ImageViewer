@@ -18,11 +18,12 @@ import {
   hasUnlimitedDownloadsToday,
   useMonetizationStore,
 } from '../../store/monetizationStore';
+import { RewardedAdButton } from '../../components/RewardedAdButton';
 import { useAppTheme } from '../../theme/theme';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
 const DOWNLOAD_LIMIT_MESSAGE =
-  '本日の無料ダウンロード回数を使い切りました。ギャラリー画面の「広告を見て本日は無制限に」ボタンから広告を視聴するか、設定画面からPremium機能を購入すると無制限になります。';
+  '本日の無料ダウンロード回数を使い切りました。下の「広告を見て本日は無制限に」ボタンから広告を視聴するか、設定画面からPremium機能を購入すると無制限になります。';
 
 /**
  * The user only ever sees the generic DOWNLOAD_FAILURE_MESSAGE — the actual
@@ -242,6 +243,11 @@ export function ImageSelectionScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        {!purchasedPremium && (
+          <View style={styles.rewardedAdRow}>
+            <RewardedAdButton />
+          </View>
+        )}
         <Text style={[styles.remainingDownloads, { color: colors.secondaryText }]}>
           本日のダウンロード可能回数: {remainingDownloadsLabel}
         </Text>
@@ -353,6 +359,10 @@ const styles = StyleSheet.create({
     padding: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#ddd',
+  },
+  rewardedAdRow: {
+    alignItems: 'center',
+    marginBottom: 10,
   },
   remainingDownloads: {
     fontSize: 12,

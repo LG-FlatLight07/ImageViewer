@@ -7,10 +7,10 @@ import { hasUnlimitedDownloadsToday, useMonetizationStore } from '../store/monet
 import { useAppTheme } from '../theme/theme';
 
 /**
- * Gallery-only entry point for the free tier's daily download cap: watching
- * one rewarded ad lifts the cap for the rest of the calendar day. Hidden
- * entirely once premium is purchased (see FolderListScreen.tsx), since a
- * purchase already grants unlimited downloads forever.
+ * Entry point for the free tier's daily download cap: watching one rewarded
+ * ad lifts the cap for the rest of the calendar day. Hidden entirely once
+ * premium is purchased (see ImageSelectionScreen.tsx), since a purchase
+ * already grants unlimited downloads forever.
  */
 export function RewardedAdButton() {
   const { colors } = useAppTheme();

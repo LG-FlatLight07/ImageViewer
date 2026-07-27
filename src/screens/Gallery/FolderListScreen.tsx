@@ -32,15 +32,11 @@ import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
-import { RewardedAdButton } from '../../components/RewardedAdButton';
 import { useBrowserStore } from '../../store/browserStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { useMonetizationStore } from '../../store/monetizationStore';
 import { useAppTheme } from '../../theme/theme';
 
 const SEARCH_SCREEN_ID = 'gallery.folderList.search';
-const SORT_SCREEN_ID = 'gallery.folderList.sort';
-const REWARDED_AD_SCREEN_ID = 'gallery.folderList.rewardedAd';
 const MIN_LIST_PADDING_TOP = 80;
 const LIST_RESERVE_GAP = 24;
 
@@ -59,7 +55,6 @@ export function FolderListScreen() {
   const { colors } = useAppTheme();
   const searchAnchor = useLayoutStore((state) => state.layouts[SEARCH_SCREEN_ID]?.anchor);
   const searchAtBottom = searchAnchor === EDGE_BOTTOM_ANCHOR;
-  const purchasedPremium = useMonetizationStore((state) => state.purchasedPremium);
 
   const [sortKey, setSortKey] = useState<FolderSortKey>('createdAt');
   const [sortDirection, setSortDirection] = useState<FolderSortDirection>(
@@ -186,6 +181,29 @@ export function FolderListScreen() {
             >
               <Ionicons name="add" size={16} color="#fff" />
             </TouchableOpacity>
+            <View style={[styles.searchBarDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity
+              style={styles.sortButton}
+              onPress={() => setSortMenuVisible(true)}
+              accessibilityLabel="open-sort-menu"
+            >
+              <Ionicons name="swap-vertical" size={14} color={colors.text} />
+              <Text style={[styles.sortButtonText, { color: colors.text }]} numberOfLines={1}>
+                {currentSortLabel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sortDirectionButton}
+              onPress={toggleSortDirection}
+              accessibilityLabel="toggle-sort-direction"
+              hitSlop={4}
+            >
+              <Ionicons
+                name={sortDirection === 'asc' ? 'arrow-up' : 'arrow-down'}
+                size={14}
+                color={colors.text}
+              />
+            </TouchableOpacity>
           </View>
 
           {selectedTags.length > 0 && (
@@ -219,38 +237,6 @@ export function FolderListScreen() {
             </View>
           )}
         </ControlGroup>
-
-        <ControlGroup screenId={SORT_SCREEN_ID} defaultAnchor="bottomLeft">
-          <View style={styles.sortRow}>
-            <TouchableOpacity
-              style={[styles.sortButton, { backgroundColor: colors.surface }]}
-              onPress={() => setSortMenuVisible(true)}
-              accessibilityLabel="open-sort-menu"
-            >
-              <Ionicons name="swap-vertical" size={14} color={colors.text} />
-              <Text style={[styles.sortButtonText, { color: colors.text }]}>
-                {currentSortLabel}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortDirectionButton, { backgroundColor: colors.surface }]}
-              onPress={toggleSortDirection}
-              accessibilityLabel="toggle-sort-direction"
-            >
-              <Ionicons
-                name={sortDirection === 'asc' ? 'arrow-up' : 'arrow-down'}
-                size={14}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-          </View>
-        </ControlGroup>
-
-        {!purchasedPremium && (
-          <ControlGroup screenId={REWARDED_AD_SCREEN_ID} defaultAnchor="bottomRight">
-            <RewardedAdButton />
-          </ControlGroup>
-        )}
       </DraggableLayoutArea>
 
       <ActionMenuModal
@@ -398,30 +384,28 @@ const styles = StyleSheet.create({
   tagSuggestionText: {
     fontSize: 11,
   },
-  sortRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  searchBarDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 20,
+    marginLeft: 8,
   },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: '#f1f1f1',
+    gap: 3,
+    marginLeft: 8,
+    maxWidth: 96,
   },
   sortButtonText: {
-    fontSize: 12,
+    fontSize: 11,
+    flexShrink: 1,
   },
   sortDirectionButton: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#f1f1f1',
+    marginLeft: 4,
   },
   list: {
     flex: 1,

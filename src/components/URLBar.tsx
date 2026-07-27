@@ -8,9 +8,14 @@ type URLBarProps = {
   value: string;
   loading: boolean;
   bookmarked: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
   onChangeValue: (value: string) => void;
   onSubmit: () => void;
   onReload: () => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
+  onSaveImages: () => void;
   onToggleBookmark: () => void;
   onOpenBookmarks: () => void;
   onOpenHistory: () => void;
@@ -20,9 +25,14 @@ export function URLBar({
   value,
   loading,
   bookmarked,
+  canGoBack,
+  canGoForward,
   onChangeValue,
   onSubmit,
   onReload,
+  onGoBack,
+  onGoForward,
+  onSaveImages,
   onToggleBookmark,
   onOpenBookmarks,
   onOpenHistory,
@@ -31,6 +41,28 @@ export function URLBar({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <TouchableOpacity
+        style={styles.iconButton}
+        disabled={!canGoBack}
+        onPress={onGoBack}
+        accessibilityLabel="go-back"
+        hitSlop={4}
+      >
+        <Ionicons name="arrow-back" size={18} color={canGoBack ? colors.text : colors.border} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.iconButton}
+        disabled={!canGoForward}
+        onPress={onGoForward}
+        accessibilityLabel="go-forward"
+        hitSlop={4}
+      >
+        <Ionicons
+          name="arrow-forward"
+          size={18}
+          color={canGoForward ? colors.text : colors.border}
+        />
+      </TouchableOpacity>
       <TouchableOpacity
         style={styles.iconButton}
         onPress={onToggleBookmark}
@@ -59,6 +91,14 @@ export function URLBar({
         hitSlop={4}
       >
         <Ionicons name={loading ? 'close' : 'refresh'} size={18} color={colors.text} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.iconButton}
+        onPress={onSaveImages}
+        accessibilityLabel="save-images"
+        hitSlop={4}
+      >
+        <Ionicons name="download-outline" size={18} color={colors.text} />
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.iconButton}
@@ -97,11 +137,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: 36,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     borderRadius: 18,
     fontSize: 14,
   },
   iconButton: {
-    padding: 6,
+    padding: 4,
   },
 });
