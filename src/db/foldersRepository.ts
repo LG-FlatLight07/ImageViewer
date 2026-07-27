@@ -188,6 +188,32 @@ export async function getFolder(db: SQLiteDatabase, id: string): Promise<FolderW
   return withTags;
 }
 
+/**
+ * The folder itself plus every descendant (recursively), in no particular
+ * order. Callers use this before deleting a folder to find every on-disk
+ * `dirPath` that needs to be removed — `deleteFolder()` only deletes the one
+ * DB row (subfolders cascade away automatically via the `parent_id`
+ * foreign key), so the filesystem side has to be handled explicitly first,
+ * while the rows (and their `dirPath`s) still exist to query.
+ */
+export async function getFolderAndDescendants(db: SQLiteDatabase, id: string): Promise<Folder[]> {
+  const rows = await db.getAllAsync<FolderRow>(
+    `WITH RECURSIVE descendants(id) AS (
+       SELECT ?
+       UNION
+       SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
+     )
+     SELECT * FROM folders WHERE id IN (SELECT id FROM descendants)`,
+    id,
+  );
+  return rows.map(mapFolderRow);
+}
+
+/** Removes any tag no longer attached to any folder. */
+export async function pruneUnusedTags(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM folder_tags)');
+}
+
 export async function getFolderAncestors(db: SQLiteDatabase, id: string): Promise<Folder[]> {
   const ancestors: Folder[] = [];
   let currentId: string | null = id;
@@ -231,6 +257,9 @@ export async function setFolderTags(
       );
     }
   });
+  // A tag removed here (or never re-added) may now have zero folders left
+  // using it — clear it out rather than leaving it to linger forever.
+  await pruneUnusedTags(db);
 }
 
 export async function moveFolder(
@@ -246,7 +275,12 @@ export async function renameFolder(db: SQLiteDatabase, id: string, name: string)
 }
 
 export async function deleteFolder(db: SQLiteDatabase, id: string): Promise<void> {
+  // Subfolders, their folder_tags, and download_history rows cascade away
+  // automatically via the foreign keys (see schema.ts) — this only needs to
+  // remove the one row. Callers still need `getFolderAndDescendants()`
+  // beforehand to clean up on-disk files, since those aren't tracked by SQL.
   await db.runAsync('DELETE FROM folders WHERE id = ?', id);
+  await pruneUnusedTags(db);
 }
 
 export async function incrementFolderViewCount(db: SQLiteDatabase, id: string): Promise<void> {

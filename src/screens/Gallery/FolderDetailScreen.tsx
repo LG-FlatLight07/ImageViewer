@@ -13,6 +13,7 @@ import {
   createFolder,
   deleteFolder,
   getFolder,
+  getFolderAndDescendants,
   incrementFolderViewCount,
   listFolders,
   renameFolder,
@@ -89,7 +90,10 @@ export function FolderDetailScreen() {
 
   const handleDeleteSubfolder = (target: FolderWithTags) => {
     confirmDeleteFolder(target.name, async () => {
-      await deleteFolderFiles(target);
+      const descendants = await getFolderAndDescendants(db, target.id);
+      for (const descendant of descendants) {
+        await deleteFolderFiles(descendant);
+      }
       await deleteFolder(db, target.id);
       reload();
     });

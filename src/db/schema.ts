@@ -1,8 +1,11 @@
+import { Directory } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
-const MIGRATIONS: Record<number, string> = {
+type Migration = string | ((db: SQLiteDatabase) => Promise<void>);
+
+const MIGRATIONS: Record<number, Migration> = {
   1: `
     PRAGMA journal_mode = WAL;
 
@@ -120,15 +123,69 @@ const MIGRATIONS: Record<number, string> = {
       cached_at INTEGER NOT NULL
     );
   `,
+  9: async (db) => {
+    // `PRAGMA foreign_keys` was never enabled before this migration (see
+    // migrateDbIfNeeded below), so every `ON DELETE CASCADE` above was
+    // silently a no-op: deleting a folder never actually removed its
+    // subfolders, their folder_tags, or their download_history rows —
+    // they lingered as orphans that still matched name/tag search. This is
+    // a one-time cleanup of whatever that bug already left behind: find
+    // every folder whose ancestor chain is broken (points, directly or
+    // transitively, at a parent_id that no longer exists), delete its
+    // on-disk files (if any — DB rows can't be queried for this once the
+    // rows themselves are gone), then remove the rows and prune any tag
+    // left with zero folders.
+    const orphans = await db.getAllAsync<{ id: string; dir_path: string | null }>(`
+      WITH RECURSIVE orphans(id) AS (
+        SELECT id FROM folders WHERE parent_id IS NOT NULL
+          AND parent_id NOT IN (SELECT id FROM folders)
+        UNION
+        SELECT f.id FROM folders f JOIN orphans o ON f.parent_id = o.id
+      )
+      SELECT f.id, f.dir_path FROM folders f JOIN orphans o ON o.id = f.id
+    `);
+    for (const orphan of orphans) {
+      if (!orphan.dir_path) {
+        continue;
+      }
+      try {
+        const directory = new Directory(orphan.dir_path);
+        if (directory.exists) {
+          directory.delete();
+        }
+      } catch {
+        // best-effort cleanup, matching deleteFolderFiles()'s own handling
+      }
+    }
+    if (orphans.length > 0) {
+      const placeholders = orphans.map(() => '?').join(',');
+      const ids = orphans.map((orphan) => orphan.id);
+      await db.runAsync(`DELETE FROM folder_tags WHERE folder_id IN (${placeholders})`, ids);
+      await db.runAsync(`DELETE FROM download_history WHERE folder_id IN (${placeholders})`, ids);
+      await db.runAsync(`DELETE FROM folders WHERE id IN (${placeholders})`, ids);
+    }
+    await db.runAsync('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM folder_tags)');
+  },
 };
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
+  // `foreign_keys` is a per-connection setting SQLite never persists to the
+  // database file, so it must be re-enabled on every app launch — without
+  // it, every `ON DELETE CASCADE` above (folders.parent_id, folder_tags,
+  // download_history) is silently ignored.
+  await db.execAsync('PRAGMA foreign_keys = ON;');
+
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentVersion = row?.user_version ?? 0;
 
   while (currentVersion < SCHEMA_VERSION) {
     const nextVersion = currentVersion + 1;
-    await db.execAsync(MIGRATIONS[nextVersion]);
+    const migration = MIGRATIONS[nextVersion];
+    if (typeof migration === 'function') {
+      await migration(db);
+    } else {
+      await db.execAsync(migration);
+    }
     await db.execAsync(`PRAGMA user_version = ${nextVersion}`);
     currentVersion = nextVersion;
   }

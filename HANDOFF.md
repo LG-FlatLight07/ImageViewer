@@ -1,12 +1,13 @@
 # ImageViewer 引き継ぎドキュメント
 
 最終更新: 2026-07-27 / 対象ブランチ: `claude/android-ios-browser-app-ljupsx`
-(最新コミット: `fac1eed` ブラウザー/ギャラリーのUIを統合し、報酬型広告ボタンをダウンロード画面へ移動)
+(最新コミット: フォルダ削除の内部不整合(PRAGMA foreign_keys未設定)を修正)
 
 このファイルは、次回セッション(コンテキストをクリアした後)で作業をスムーズに再開するための
 引き継ぎ資料です。**バックエンド(Supabase)導入・収益化(広告・買い切り課金)・実機テストで
-判明した問題の修正・独自トップページ/起動時ページ設定・UIレイアウトの統合まで完了**しています。
-現状のアーキテクチャ・データモデル・既知の制約・今後の検討事項を詳細にまとめています。
+判明した問題の修正・独自トップページ/起動時ページ設定・UIレイアウトの統合・フォルダ削除の
+内部不整合の修正まで完了**しています。現状のアーキテクチャ・データモデル・既知の制約・
+今後の検討事項を詳細にまとめています。
 
 ---
 
@@ -183,7 +184,7 @@ src/
     ActionMenuModal.tsx / PromptModal.tsx / TagEditorModal.tsx
     DownloadProgressBar.tsx / DownloadCompleteToast.tsx
   db/
-    schema.ts          SQLiteマイグレーション定義(現在 SCHEMA_VERSION = 8)
+    schema.ts          SQLiteマイグレーション定義(現在 SCHEMA_VERSION = 9)
     DatabaseProvider.tsx
     foldersRepository.ts     folders テーブル CRUD(download_history と LEFT JOIN して sourceUrl 解決)
     downloadHistoryRepository.ts  download_history(ローカル)書き込み + Supabase record_download RPC呼び出し
@@ -787,16 +788,62 @@ Web版から再現しづらいため、目視確認は未実施(コードレビ�
 
 ---
 
-## 16. タスク管理ツールの状態
+## 16. フォルダ削除が内部的に不完全だった不具合の修正(#167〜#169)
 
-このセッションのタスクリストは #1〜#165 まで全て `completed`。バックエンド導入・
+- **根本原因**: `schema.ts`は`folders.parent_id`/`folder_tags`/`download_history`に
+  `ON DELETE CASCADE`を定義していたが、SQLiteは`PRAGMA foreign_keys`を
+  **接続ごとに明示的にONにしない限りこれらの制約を一切強制しない**仕様であり、
+  このプラグマがこれまで一度も有効化されていなかった。そのため`deleteFolder()`が
+  `DELETE FROM folders WHERE id = ?`を実行しても、削除したフォルダの**サブフォルダは
+  DBに残り続け**(親のidが存在しなくなるだけ)、それらの`folder_tags`も残るため、
+  タグ検索で「消したはずのフォルダ」がヒットしていた(ユーザー報告と完全に一致)
+- **今後の修正**: `migrateDbIfNeeded()`の先頭で毎回`PRAGMA foreign_keys = ON;`を
+  実行するように変更。以後は`deleteFolder(db, id)`が1行`DELETE`するだけで、
+  サブフォルダ・`folder_tags`・`download_history`がSQLite側で正しくカスケード削除される
+- **既存の孤児データの一括クリーンアップ(マイグレーション9)**: 再帰CTEで
+  「祖先を辿ると存在しないparent_idに行き着く(=壊れた)フォルダ」を全て検出し、
+  対象フォルダの実ファイル(dirPathがある場合)を削除 → `folder_tags`/
+  `download_history`/`folders`の該当行を削除 → 最後にどのフォルダにも
+  紐付いていないタグを全て削除、という一連の処理を1回だけ実行する。Pythonの
+  `sqlite3`モジュールでこのロジックを実際に構築したツリー(a→b→c)に対して検証し、
+  カスケード削除・孤児検出・タグの自動プルーニングがすべて意図通り動くことを確認済み
+- **未使用タグの自動削除**: `foldersRepository.pruneUnusedTags()`を新設し、
+  `deleteFolder()`と`setFolderTags()`の末尾で必ず呼ぶようにした。これにより、
+  「あるタグを設定していたフォルダが(削除やタグ編集で)すべて無くなったら、
+  そのタグ自体も自動的に消える」というユーザーの要望を満たす
+- **削除時の実ファイルクリーンアップ**: `deleteFolder()`はDB行しか消さない
+  (サブフォルダはSQLiteのカスケードに任せる)ため、削除対象がダウンロード直後に
+  「フォルダ移動」で誰かの子フォルダになっていた場合、その実ファイル
+  (`dirPath`配下の画像)は消えないまま孤立してしまう。新設した
+  `getFolderAndDescendants(db, id)`(自分自身+全ての子孫を再帰CTEで取得)を使い、
+  `FolderListScreen.tsx`/`FolderDetailScreen.tsx`の削除ハンドラーで、DB削除の**前**に
+  子孫全員分の`deleteFolderFiles()`を呼ぶよう修正
+
+### 16-1. サンドボックスでの検証状況(#167〜#169)
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`(31件)全てパス。加えて、Pythonの
+標準`sqlite3`モジュールで実際にSQLiteエンジンを使い、(1)`foreign_keys = ON`時の
+カスケード削除が親→子→孫まで正しく効くこと、(2)マイグレーション9の孤児検出・
+削除・タグプルーニングのロジックが、意図的に「カスケード無効」で作った孤児データに
+対して正しく動作することの両方を実際に実行して確認済み(アプリのマイグレーション文
+そのものではなく、同じロジックを再現したテストスクリプトでの検証)。実機での
+既存データに対する一括クリーンアップの実行結果自体は、実機で初回起動した時に
+確認することを推奨する
+
+---
+
+## 17. タスク管理ツールの状態
+
+このセッションのタスクリストは #1〜#169 まで全て `completed`。バックエンド導入・
 Android公開準備・収益化(広告・買い切り課金)の実装・実機テストで判明した問題の修正
 (2回分)・オリジナルのブラウザートップページと起動時ページ設定の追加・
 サーバー履歴リセット不具合の根本原因特定と修正・ブラウザー/ギャラリーのUI統合
-(検索UI+戻る進むDL、検索UI+ソートUI、報酬型広告ボタンの移動)まで完了。実際の
-Play Console登録・ビルド提出・AdMob/IAPの実機動作確認・修正後の
-`reset_download_history`関数のSupabase側での再作成・トップページとUI統合の
-実機確認はユーザー側の操作待ち。次回セッションで新しい依頼があれば、そこから
+(検索UI+戻る進むDL、検索UI+ソートUI、報酬型広告ボタンの移動)・
+`PRAGMA foreign_keys`未設定によるフォルダ削除不具合の修正(既存孤児データの
+クリーンアップ含む)まで完了。実際のPlay Console登録・ビルド提出・AdMob/IAPの
+実機動作確認・修正後の`reset_download_history`関数のSupabase側での再作成・
+トップページとUI統合の実機確認・フォルダ削除修正(マイグレーション9)の実機での
+初回起動確認はユーザー側の操作待ち。次回セッションで新しい依頼があれば、そこから
 新規タスクを起こす想定。
 
 ### 今後の検討事項(未着手)

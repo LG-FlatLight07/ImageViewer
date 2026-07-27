@@ -17,6 +17,7 @@ import {
 import {
   createFolder,
   deleteFolder,
+  getFolderAndDescendants,
   listAllTagNames,
   listFolders,
   renameFolder,
@@ -104,7 +105,10 @@ export function FolderListScreen() {
 
   const handleDelete = (folder: FolderWithTags) => {
     confirmDeleteFolder(folder.name, async () => {
-      await deleteFolderFiles(folder);
+      const descendants = await getFolderAndDescendants(db, folder.id);
+      for (const descendant of descendants) {
+        await deleteFolderFiles(descendant);
+      }
       await deleteFolder(db, folder.id);
       reload();
     });
