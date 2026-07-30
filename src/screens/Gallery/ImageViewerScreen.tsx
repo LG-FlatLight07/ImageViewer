@@ -26,6 +26,13 @@ const DISMISS_DISTANCE = 100;
 const DISMISS_VELOCITY = 800;
 const AXIS_LOCK_THRESHOLD = 8;
 const INERTIA_FACTOR = 0.25;
+// Every page's slot is always laid out (the free-scroll physics need every
+// offset up front), but only pages within this many slots of the current one
+// actually mount an <Image> — everything else is a plain empty slot. Without
+// this, opening a folder with dozens of images decoded every single one of
+// them into memory at once, which is what made real-device swiping feel
+// heavy on large folders.
+const LOAD_WINDOW = 2;
 
 type PageItem = { uri: string; folderId: string; width: number; height: number };
 
@@ -284,15 +291,17 @@ function ImageViewerContent({
                     },
               ]}
             >
-              <Image
-                source={{ uri: page.uri }}
-                style={
-                  isHorizontal
-                    ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
-                    : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
-                }
-                resizeMode="contain"
-              />
+              {Math.abs(index - currentIndex) <= LOAD_WINDOW && (
+                <Image
+                  source={{ uri: page.uri }}
+                  style={
+                    isHorizontal
+                      ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
+                      : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
+                  }
+                  resizeMode="contain"
+                />
+              )}
             </View>
           ))}
         </Animated.View>
