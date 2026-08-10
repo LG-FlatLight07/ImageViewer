@@ -1,10 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
+import { Image } from 'expo-image';
 
 import type { RootStackParamList } from '../../navigation/types';
 import type { DetectedImage } from '../../services/imageGrouping';
@@ -174,7 +175,12 @@ export function ImageSelectionScreen() {
         onPress={() => toggleImage(image.id)}
         activeOpacity={0.8}
       >
-        <Image source={{ uri: image.src }} style={styles.thumbImage} resizeMode="cover" />
+        <Image
+          source={{ uri: image.src }}
+          style={styles.thumbImage}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
         <View style={[styles.checkBadge, selected && styles.checkBadgeSelected]}>
           <Ionicons
             name={selected ? 'checkmark-circle' : 'ellipse-outline'}

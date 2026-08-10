@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurTargetView, BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -307,7 +308,12 @@ function RankingRow({
         <BlurTargetView ref={blurTargetRef} style={styles.blurTargetContent}>
           <View style={styles.thumbnail}>
             {thumbnailUri && !locked ? (
-              <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
+              <Image
+                source={{ uri: thumbnailUri }}
+                style={styles.thumbnailImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
             ) : (
               <View
                 style={[

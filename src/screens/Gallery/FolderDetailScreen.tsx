@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Image } from 'expo-image';
 
 import type { GalleryStackParamList } from '../../navigation/types';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
@@ -212,7 +213,8 @@ export function FolderDetailScreen() {
                     <Image
                       source={{ uri: item.uri }}
                       style={styles.imageThumb}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                     {selectionMode && (
                       <View style={[styles.selectBadge, selected && styles.selectBadgeSelected]}>

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
 import type { FolderWithTags } from '../db/types';
 import { listFolderImageUris } from '../db/folderImages';
@@ -105,7 +106,12 @@ export function FolderRow({
         activeOpacity={0.7}
       >
         {thumbnailUri ? (
-          <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
+          <Image
+            source={{ uri: thumbnailUri }}
+            style={styles.thumbnail}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
         ) : (
           <View
             style={[

@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Dimensions,
+  Image as RNImage,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,7 +47,7 @@ type PageItem = { uri: string; folderId: string; width: number; height: number }
 /** width/height are 0 if the size couldn't be read; callers fall back to a full-screen slot in that case. */
 function getImageSize(uri: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
-    Image.getSize(
+    RNImage.getSize(
       uri,
       (width, height) => resolve({ width, height }),
       () => resolve({ width: 0, height: 0 }),
@@ -299,7 +307,8 @@ function ImageViewerContent({
                       ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
                       : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
                   }
-                  resizeMode="contain"
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
                 />
               )}
             </View>
