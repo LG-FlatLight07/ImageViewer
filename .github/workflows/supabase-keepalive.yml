@@ -25,7 +25,7 @@ jobs:
           fi
 
           http_code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            "${SUPABASE_URL}/rest/v1/ranking_daily_counts?select=id&limit=1" \
+            "${SUPABASE_URL}/rest/v1/ranking_daily_counts?select=url_key&limit=1" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
 
