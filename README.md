@@ -45,6 +45,22 @@ Web閲覧機能と画像ビューアー/ギャラリー機能を併せ持つ、A
 npm install
 ```
 
+### Supabaseプロジェクトの自動一時停止を防ぐ
+
+Supabaseの無料プランは、APIアクセスが約1週間ないとプロジェクトが自動的に
+一時停止(pause)されます(データは保持されるが、ダッシュボードから手動で
+「Restore project」しないと使えなくなる)。これを防ぐため、
+`.github/workflows/supabase-keepalive.yml` が3日おきにSupabaseへ軽いリクエストを
+送信します。有効にするには、リポジトリの Settings → Secrets and variables →
+Actions で以下のRepository secretsを設定してください(値は `.env` の
+`EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` と同じもの)。
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+設定後は Actions タブから `Supabase Keep-Alive` を手動実行(workflow_dispatch)して
+動作確認できます。
+
 ## 開発サーバーの起動
 
 ⚠️ **重要**: 広告(AdMob / react-native-google-mobile-ads)と買い切り課金(expo-iap)を
