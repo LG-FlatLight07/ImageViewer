@@ -19,6 +19,7 @@ type FolderRow = {
   created_at: number;
   view_count: number;
   image_count: number;
+  first_image_uri: string | null;
 };
 
 type TagRow = {
@@ -36,6 +37,7 @@ function mapFolderRow(row: FolderRow): Folder {
     createdAt: row.created_at,
     viewCount: row.view_count,
     imageCount: row.image_count,
+    firstImageUri: row.first_image_uri,
   };
 }
 
@@ -93,6 +95,7 @@ export async function createFolder(
     createdAt,
     viewCount: 0,
     imageCount,
+    firstImageUri: null,
   };
 }
 
@@ -154,7 +157,7 @@ export async function listFolders(
   const rows = await db.getAllAsync<FolderRow>(
     `SELECT f.id, f.name, f.parent_id, f.dir_path,
             COALESCE(dh.page_url, f.source_url) as source_url,
-            f.created_at, f.view_count, f.image_count ${selectExtra}
+            f.created_at, f.view_count, f.image_count, dh.first_image_uri ${selectExtra}
      FROM folders f
      LEFT JOIN download_history dh ON dh.folder_id = f.id
      ${joinExtra}
@@ -175,7 +178,7 @@ export async function getFolder(db: SQLiteDatabase, id: string): Promise<FolderW
   const row = await db.getFirstAsync<FolderRow>(
     `SELECT f.id, f.name, f.parent_id, f.dir_path,
             COALESCE(dh.page_url, f.source_url) as source_url,
-            f.created_at, f.view_count, f.image_count
+            f.created_at, f.view_count, f.image_count, dh.first_image_uri
      FROM folders f
      LEFT JOIN download_history dh ON dh.folder_id = f.id
      WHERE f.id = ?`,

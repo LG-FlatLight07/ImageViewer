@@ -28,16 +28,30 @@ export function FolderRow({
   onJumpToSource,
 }: FolderRowProps) {
   const { colors } = useAppTheme();
-  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  // `firstImageUri` is recorded once at download time (see
+  // downloadHistoryRepository.ts) and is available for the vast majority of
+  // folders — used directly, synchronously, during render. Only folders
+  // with no recorded download (manually created, or from before this field
+  // existed) fall back to listFolderImageUris() below, which synchronously
+  // lists every file in the folder just to read off the first one; with
+  // many rows mounting at once (opening the gallery, or a tag search
+  // re-rendering the list) that per-row directory scan was blocking the JS
+  // thread and freezing the UI, so it's now the exception rather than the
+  // rule.
+  const [scannedThumbnailUri, setScannedThumbnailUri] = useState<string | null>(null);
+  const thumbnailUri = folder.firstImageUri ?? scannedThumbnailUri;
   const swipeableRef = useRef<Swipeable>(null);
   const coordinator = useSwipeRowCoordinator();
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (folder.firstImageUri !== null) {
+      return;
+    }
     let cancelled = false;
     listFolderImageUris(folder).then((uris) => {
       if (!cancelled) {
-        setThumbnailUri(uris[0] ?? null);
+        setScannedThumbnailUri(uris[0] ?? null);
       }
     });
     return () => {

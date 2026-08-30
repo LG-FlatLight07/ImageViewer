@@ -12,6 +12,8 @@ export type Folder = {
   createdAt: number;
   viewCount: number;
   imageCount: number;
+  /** Recorded once at download time (see downloadHistoryRepository.ts) — null for folders created without a download (e.g. manually, or pre-migration). */
+  firstImageUri: string | null;
 };
 
 export type FolderWithTags = Folder & {

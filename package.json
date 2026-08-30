@@ -11,6 +11,7 @@
     "@supabase/supabase-js": "^2.110.8",
     "expo": "~57.0.7",
     "expo-blur": "^57.0.2",
+    "expo-constants": "~57.0.16",
     "expo-crypto": "~57.0.1",
     "expo-file-system": "~57.0.1",
     "expo-iap": "^4.7.0",
