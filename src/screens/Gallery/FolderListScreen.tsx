@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,7 @@ import {
   createFolder,
   deleteFolder,
   getFolderAndDescendants,
-  listAllTagNames,
+  listAllTagNamesByUsage,
   listFolders,
   renameFolder,
   setFolderTags,
@@ -34,6 +34,7 @@ import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea
 import { ControlGroup } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
 import { useBrowserStore } from '../../store/browserStore';
+import { useDownloadStore } from '../../store/downloadStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useAppTheme } from '../../theme/theme';
 
@@ -86,9 +87,23 @@ export function FolderListScreen() {
   useFocusEffect(
     useCallback(() => {
       reload();
-      listAllTagNames(db).then(setAllTagNames);
+      listAllTagNamesByUsage(db).then(setAllTagNames);
     }, [db, reload]),
   );
+
+  // handleDownload navigates back to this screen the instant a download
+  // *starts* (see ImageSelectionScreen), so the download itself finishes
+  // while this screen is already focused — useFocusEffect never re-fires,
+  // and the new folder wouldn't show up until the user left and returned.
+  // Catch that active->inactive transition explicitly instead.
+  const downloadActive = useDownloadStore((state) => state.active);
+  const wasDownloadActiveRef = useRef(false);
+  useEffect(() => {
+    if (wasDownloadActiveRef.current && !downloadActive) {
+      reload();
+    }
+    wasDownloadActiveRef.current = downloadActive;
+  }, [downloadActive, reload]);
 
   const tagSuggestions = allTagNames
     .filter((name) => !selectedTags.includes(name))
@@ -317,7 +332,7 @@ export function FolderListScreen() {
           }
           setTaggingFolder(null);
           reload();
-          listAllTagNames(db).then(setAllTagNames);
+          listAllTagNamesByUsage(db).then(setAllTagNames);
         }}
       />
     </SafeAreaView>

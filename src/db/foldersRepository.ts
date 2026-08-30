@@ -299,3 +299,15 @@ export async function listAllTagNames(db: SQLiteDatabase): Promise<string[]> {
   const rows = await db.getAllAsync<TagRow>('SELECT * FROM tags ORDER BY name COLLATE NOCASE ASC');
   return rows.map((r) => r.name);
 }
+
+/** Same tag list as `listAllTagNames`, but ordered by how many folders use each tag (most-used first), then name. */
+export async function listAllTagNamesByUsage(db: SQLiteDatabase): Promise<string[]> {
+  const rows = await db.getAllAsync<TagRow & { usage_count: number }>(
+    `SELECT t.id, t.name, COUNT(ft.folder_id) as usage_count
+     FROM tags t
+     LEFT JOIN folder_tags ft ON ft.tag_id = t.id
+     GROUP BY t.id
+     ORDER BY usage_count DESC, t.name COLLATE NOCASE ASC`,
+  );
+  return rows.map((r) => r.name);
+}

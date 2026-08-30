@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -65,6 +65,23 @@ async function reportDownloadFailure(
 }
 
 const THUMB_SIZE = 100;
+const THUMBS_PER_ROW = 4;
+
+type ListRow =
+  | { type: 'header'; key: string; title: string }
+  | { type: 'row'; key: string; images: DetectedImage[] };
+
+function chunkIntoRows(images: DetectedImage[], keyPrefix: string): ListRow[] {
+  const rows: ListRow[] = [];
+  for (let i = 0; i < images.length; i += THUMBS_PER_ROW) {
+    rows.push({
+      type: 'row',
+      key: `${keyPrefix}-${i}`,
+      images: images.slice(i, i + THUMBS_PER_ROW),
+    });
+  }
+  return rows;
+}
 
 export function ImageSelectionScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ImageSelection'>>();
@@ -115,6 +132,33 @@ export function ImageSelectionScreen() {
 
   const selectAll = () => setSelectedIds(new Set(allImages.map((image) => image.id)));
   const clearAll = () => setSelectedIds(new Set());
+
+  // Rows (not individual images) are what FlatList virtualizes here, so that
+  // only thumbnails near the viewport ever mount an <Image> and start
+  // fetching — previously every thumbnail in the whole ScrollView mounted
+  // at once, firing dozens of concurrent full-resolution image requests
+  // (these src URLs are the page's original images, not pre-sized
+  // thumbnails) and starving the ones actually on screen.
+  const listRows = useMemo<ListRow[]>(() => {
+    const rows: ListRow[] = [];
+    if (primaryGroup && primaryGroup.images.length > 0) {
+      rows.push({
+        type: 'header',
+        key: 'header-primary',
+        title: `検出された連番画像 (${primaryGroup.images.length}件)`,
+      });
+      rows.push(...chunkIntoRows(primaryGroup.images, 'primary'));
+    }
+    if (otherImages.length > 0) {
+      rows.push({
+        type: 'header',
+        key: 'header-other',
+        title: `その他の画像 (${otherImages.length}件)`,
+      });
+      rows.push(...chunkIntoRows(otherImages, 'other'));
+    }
+    return rows;
+  }, [primaryGroup, otherImages]);
 
   // Guards against duplicate folders/ranking entries from a rapid double-tap
   // firing this handler more than once before the screen unmounts.
@@ -192,6 +236,15 @@ export function ImageSelectionScreen() {
     );
   };
 
+  const renderRow = ({ item }: { item: ListRow }) => {
+    if (item.type === 'header') {
+      return (
+        <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{item.title}</Text>
+      );
+    }
+    return <View style={styles.grid}>{item.images.map(renderThumbnail)}</View>;
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -224,29 +277,24 @@ export function ImageSelectionScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {primaryGroup && primaryGroup.images.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-              検出された連番画像 ({primaryGroup.images.length}件)
+      <FlatList
+        contentContainerStyle={styles.scrollContent}
+        data={listRows}
+        keyExtractor={(row) => row.key}
+        renderItem={renderRow}
+        // A handful of screens' worth up front so the initial view (and a
+        // quick scroll) never shows an empty gap while images decode.
+        initialNumToRender={6}
+        windowSize={5}
+        removeClippedSubviews
+        ListEmptyComponent={
+          allImages.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              広告を除いた保存候補の画像が見つかりませんでした
             </Text>
-            <View style={styles.grid}>{primaryGroup.images.map(renderThumbnail)}</View>
-          </>
-        )}
-        {otherImages.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-              その他の画像 ({otherImages.length}件)
-            </Text>
-            <View style={styles.grid}>{otherImages.map(renderThumbnail)}</View>
-          </>
-        )}
-        {allImages.length === 0 && (
-          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-            広告を除いた保存候補の画像が見つかりませんでした
-          </Text>
-        )}
-      </ScrollView>
+          ) : null
+        }
+      />
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         {!purchasedPremium && (

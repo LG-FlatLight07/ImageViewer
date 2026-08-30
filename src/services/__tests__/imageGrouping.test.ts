@@ -64,6 +64,25 @@ describe('detectImageGroups', () => {
     expect(result.otherImages).toHaveLength(1);
   });
 
+  it('keeps unpadded and zero-padded page numbers in the same group (e.g. 1..9 then 010, 011)', () => {
+    const result = detectImageGroups([
+      image('https://cdn.example.com/manga/page_1.jpg'),
+      image('https://cdn.example.com/manga/page_2.jpg'),
+      image('https://cdn.example.com/manga/page_9.jpg'),
+      image('https://cdn.example.com/manga/page_010.jpg'),
+      image('https://cdn.example.com/manga/page_011.jpg'),
+    ]);
+
+    expect(result.primaryGroup?.images.map((i) => i.src)).toEqual([
+      'https://cdn.example.com/manga/page_1.jpg',
+      'https://cdn.example.com/manga/page_2.jpg',
+      'https://cdn.example.com/manga/page_9.jpg',
+      'https://cdn.example.com/manga/page_010.jpg',
+      'https://cdn.example.com/manga/page_011.jpg',
+    ]);
+    expect(result.otherImages).toHaveLength(0);
+  });
+
   it('picks the largest group as primary and demotes smaller groups to otherImages', () => {
     const result = detectImageGroups([
       image('https://cdn.example.com/manga/page_001.jpg'),
