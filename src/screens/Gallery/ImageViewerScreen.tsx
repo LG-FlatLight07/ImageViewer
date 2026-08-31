@@ -33,6 +33,15 @@ const GAP = 2;
 const DISMISS_DISTANCE = 100;
 const DISMISS_VELOCITY = 800;
 const AXIS_LOCK_THRESHOLD = 8;
+// A swipe that's meant purely as paging (main axis) is rarely perfectly
+// straight — some cross-axis wobble from finger movement is normal. Locking
+// to whichever axis was merely larger at the 8px threshold made ordinary,
+// slightly-off-axis reading swipes register as a dismiss-to-gallery swipe
+// far too easily. Requiring the cross axis to clearly dominate (not just
+// edge out) the main axis before it's allowed to win keeps the dismiss
+// gesture reserved for swipes that are actually meant that way, without
+// making genuine main-axis paging feel less responsive.
+const CROSS_AXIS_DOMINANCE = 2;
 const INERTIA_FACTOR = 0.25;
 // Every page's slot is always laid out (the free-scroll physics need every
 // offset up front), but only pages within this many slots of the current one
@@ -229,8 +238,13 @@ function ImageViewerContent({
       const mainRaw = isHorizontal ? event.translationX : event.translationY;
       const crossRaw = isHorizontal ? event.translationY : event.translationX;
       if (axisLock.value === 0) {
-        if (Math.abs(mainRaw) > AXIS_LOCK_THRESHOLD || Math.abs(crossRaw) > AXIS_LOCK_THRESHOLD) {
-          axisLock.value = Math.abs(mainRaw) >= Math.abs(crossRaw) ? 1 : 2;
+        if (
+          Math.abs(crossRaw) > AXIS_LOCK_THRESHOLD &&
+          Math.abs(crossRaw) > Math.abs(mainRaw) * CROSS_AXIS_DOMINANCE
+        ) {
+          axisLock.value = 2;
+        } else if (Math.abs(mainRaw) > AXIS_LOCK_THRESHOLD) {
+          axisLock.value = 1;
         }
       }
       const mainDelta = axisLock.value === 2 ? 0 : mainRaw;
@@ -240,9 +254,15 @@ function ImageViewerContent({
     })
     .onEnd((event) => {
       const crossVelocity = isHorizontal ? event.velocityY : event.velocityX;
+      // Without this axisLock check, a fast release with any incidental
+      // cross-axis velocity could trigger a dismiss purely on velocity even
+      // when the drag itself locked to (and stayed on) the main paging axis
+      // the whole time — the same over-sensitivity this axis-lock exists to
+      // prevent, just sneaking in through onEnd instead of onUpdate.
       if (
-        Math.abs(translateCross.value) > DISMISS_DISTANCE ||
-        Math.abs(crossVelocity) > DISMISS_VELOCITY
+        axisLock.value === 2 &&
+        (Math.abs(translateCross.value) > DISMISS_DISTANCE ||
+          Math.abs(crossVelocity) > DISMISS_VELOCITY)
       ) {
         const sign = translateCross.value >= 0 ? 1 : -1;
         translateCross.value = withTiming(sign * pageSize, { duration: 200 }, (finished) => {

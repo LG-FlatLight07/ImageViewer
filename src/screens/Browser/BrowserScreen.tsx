@@ -18,7 +18,7 @@ import { resolveInputToUrl } from '../../services/urlUtils';
 import { TOP_PAGE_URL, buildTopPageHtml } from '../../services/topPage';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
 import { detectImageGroups } from '../../services/imageGrouping';
-import { AD_BLOCK_SCRIPT } from '../../services/adBlock';
+import { AD_BLOCK_SCRIPT, isUserGestureMessage } from '../../services/adBlock';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import type { BrowserStackParamList } from '../../navigation/types';
 import { addHistoryEntry } from '../../db/historyRepository';
@@ -181,6 +181,44 @@ export function BrowserScreen() {
   // attributed to the wrong page within the (correct) site.
   const scanContextRef = useRef<{ pageUrl: string; pageTitle: string } | null>(null);
 
+  // Redirect-style ads send the current tab straight to an ad landing page
+  // (no new window at all, so window.open blocking never sees them) — from
+  // a delayed timer, or an invisible full-page overlay that hijacks the
+  // next tap. onShouldStartLoadWithRequest below blocks a same-window
+  // navigation that isn't tied to a genuine, recent touch, using this
+  // timestamp (updated via a message from AD_BLOCK_SCRIPT — page JS can't
+  // reliably intercept navigation itself, since location.href's setter is
+  // unforgeable in Chromium's WebView).
+  const lastGestureAtRef = useRef(0);
+  const GESTURE_WINDOW_MS = 1200;
+  // True for exactly the next navigation after `url` changes — i.e. one
+  // explicitly requested by the app itself (address bar submit, bookmark/
+  // history tap, opening a tab), which must always be allowed through
+  // regardless of origin or gesture timing, since no in-page touch is
+  // possible before that page has even started loading.
+  const pendingExplicitNavigationRef = useRef(true);
+  useEffect(() => {
+    pendingExplicitNavigationRef.current = true;
+  }, [url]);
+
+  const handleShouldStartLoad = (request: WebViewNavigation): boolean => {
+    if (!adBlockEnabled) {
+      return true;
+    }
+    if (pendingExplicitNavigationRef.current) {
+      pendingExplicitNavigationRef.current = false;
+      return true;
+    }
+    try {
+      if (new URL(request.url).origin === new URL(currentUrl).origin) {
+        return true;
+      }
+    } catch {
+      return true;
+    }
+    return Date.now() - lastGestureAtRef.current < GESTURE_WINDOW_MS;
+  };
+
   const handleSaveImages = () => {
     scanContextRef.current = { pageUrl: currentUrl, pageTitle: title || inputValue };
     webViewRef.current?.injectJavaScript(IMAGE_SCAN_SCRIPT);
@@ -204,6 +242,10 @@ export function BrowserScreen() {
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
+    if (isUserGestureMessage(event.nativeEvent.data)) {
+      lastGestureAtRef.current = Date.now();
+      return;
+    }
     const result = parseImageScanMessage(event.nativeEvent.data);
     if (!result) {
       return;
@@ -272,6 +314,7 @@ export function BrowserScreen() {
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
           onMessage={handleMessage}
+          onShouldStartLoadWithRequest={handleShouldStartLoad}
           startInLoadingState
           incognito={disableHistory}
           injectedJavaScriptBeforeContentLoaded={adBlockEnabled ? AD_BLOCK_SCRIPT : undefined}
