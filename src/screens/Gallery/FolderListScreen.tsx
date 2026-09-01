@@ -18,6 +18,7 @@ import {
   createFolder,
   deleteFolder,
   getFolderAndDescendants,
+  listAllTagNames,
   listAllTagNamesByUsage,
   listFolders,
   renameFolder,
@@ -49,6 +50,13 @@ const SORT_OPTIONS: { key: FolderSortKey; label: string }[] = [
   { key: 'viewCount', label: '閲覧回数順' },
 ];
 
+type TagSortMode = 'usage' | 'name';
+
+const TAG_SORT_OPTIONS: { key: TagSortMode; label: string }[] = [
+  { key: 'usage', label: '使用ファイル数順' },
+  { key: 'name', label: '名前順' },
+];
+
 export function FolderListScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
@@ -67,6 +75,8 @@ export function FolderListScreen() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [folders, setFolders] = useState<FolderWithTags[]>([]);
   const [allTagNames, setAllTagNames] = useState<string[]>([]);
+  const [tagSortMode, setTagSortMode] = useState<TagSortMode>('usage');
+  const [tagSortMenuVisible, setTagSortMenuVisible] = useState(false);
   const [searchBarHeight, setSearchBarHeight] = useState(0);
   const [menuFolder, setMenuFolder] = useState<FolderWithTags | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -84,11 +94,17 @@ export function FolderListScreen() {
     setFolders(result);
   }, [db, sortKey, sortDirection, searchQuery, selectedTags]);
 
+  const loadTagNames = useCallback(async () => {
+    const names =
+      tagSortMode === 'usage' ? await listAllTagNamesByUsage(db) : await listAllTagNames(db);
+    setAllTagNames(names);
+  }, [db, tagSortMode]);
+
   useFocusEffect(
     useCallback(() => {
       reload();
-      listAllTagNamesByUsage(db).then(setAllTagNames);
-    }, [db, reload]),
+      loadTagNames();
+    }, [reload, loadTagNames]),
   );
 
   // handleDownload navigates back to this screen the instant a download
@@ -242,17 +258,35 @@ export function FolderListScreen() {
           )}
 
           {tagSuggestions.length > 0 && (
-            <View style={[styles.tagSuggestionRow, { backgroundColor: colors.surface }]}>
-              {tagSuggestions.map((name) => (
+            <View style={[styles.tagSuggestionArea, { backgroundColor: colors.surface }]}>
+              <View style={styles.tagSuggestionHeader}>
+                <Text style={[styles.tagSuggestionHeaderText, { color: colors.secondaryText }]}>
+                  タグ
+                </Text>
                 <TouchableOpacity
-                  key={name}
-                  style={[styles.tagSuggestionChip, { backgroundColor: colors.background }]}
-                  onPress={() => addTagFilter(name)}
+                  style={styles.tagSortButton}
+                  onPress={() => setTagSortMenuVisible(true)}
+                  accessibilityLabel="open-tag-sort-menu"
+                  hitSlop={4}
                 >
-                  <Ionicons name="pricetag-outline" size={12} color={colors.secondaryText} />
-                  <Text style={[styles.tagSuggestionText, { color: colors.text }]}>{name}</Text>
+                  <Ionicons name="swap-vertical" size={12} color={colors.text} />
+                  <Text style={[styles.tagSortButtonText, { color: colors.text }]}>
+                    {TAG_SORT_OPTIONS.find((option) => option.key === tagSortMode)?.label}
+                  </Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+              <View style={styles.tagSuggestionRow}>
+                {tagSuggestions.map((name) => (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.tagSuggestionChip, { backgroundColor: colors.background }]}
+                    onPress={() => addTagFilter(name)}
+                  >
+                    <Ionicons name="pricetag-outline" size={12} color={colors.secondaryText} />
+                    <Text style={[styles.tagSuggestionText, { color: colors.text }]}>{name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
         </ControlGroup>
@@ -267,6 +301,15 @@ export function FolderListScreen() {
             setSortKey(option.key);
             setSortDirection(DEFAULT_SORT_DIRECTIONS[option.key]);
           },
+        }))}
+      />
+
+      <ActionMenuModal
+        visible={tagSortMenuVisible}
+        onClose={() => setTagSortMenuVisible(false)}
+        actions={TAG_SORT_OPTIONS.map((option) => ({
+          label: option.key === tagSortMode ? `✓ ${option.label}` : option.label,
+          onPress: () => setTagSortMode(option.key),
         }))}
       />
 
@@ -332,7 +375,7 @@ export function FolderListScreen() {
           }
           setTaggingFolder(null);
           reload();
-          listAllTagNamesByUsage(db).then(setAllTagNames);
+          loadTagNames();
         }}
       />
     </SafeAreaView>
@@ -384,13 +427,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  tagSuggestionArea: {
+    marginTop: 6,
+    padding: 6,
+    borderRadius: 10,
+  },
+  tagSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  tagSuggestionHeaderText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tagSortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  tagSortButtonText: {
+    fontSize: 11,
+  },
   tagSuggestionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 6,
-    padding: 6,
-    borderRadius: 10,
   },
   tagSuggestionChip: {
     flexDirection: 'row',
