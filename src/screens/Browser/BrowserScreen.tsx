@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
@@ -8,6 +8,12 @@ import { useSQLiteContext } from 'expo-sqlite';
 
 import { URLBar } from '../../components/URLBar';
 import { BrowserTabBar } from '../../components/BrowserTabBar';
+import { PromptModal } from '../../components/PromptModal';
+import {
+  SequentialPageScanner,
+  MAX_SEQUENTIAL_PAGES,
+  type SequentialPageResult,
+} from '../../components/SequentialPageScanner';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup, BAR_MARGIN } from '../../components/layout/ControlGroup';
 import { EDGE_BOTTOM_ANCHOR } from '../../components/layout/anchors';
@@ -17,7 +23,8 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { resolveInputToUrl } from '../../services/urlUtils';
 import { TOP_PAGE_URL, buildTopPageHtml } from '../../services/topPage';
 import { IMAGE_SCAN_SCRIPT, parseImageScanMessage } from '../../services/imageExtraction';
-import { detectImageGroups } from '../../services/imageGrouping';
+import { detectImageGroups, type DetectedImageGroup } from '../../services/imageGrouping';
+import { extractPageSequenceInfo } from '../../services/pageSequence';
 import { AD_BLOCK_SCRIPT, isUserGestureMessage } from '../../services/adBlock';
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import type { BrowserStackParamList } from '../../navigation/types';
@@ -27,6 +34,7 @@ import { useAppTheme } from '../../theme/theme';
 
 const CHROME_SCREEN_ID = 'browser.chrome';
 const CHROME_GAP = 16;
+const DEFAULT_SEQUENTIAL_COUNT = 20;
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
@@ -57,6 +65,20 @@ export function BrowserScreen() {
   const [chromeHeight, setChromeHeight] = useState(0);
   const isTopPage = url === TOP_PAGE_URL;
   const topPageHtml = useMemo(() => buildTopPageHtml(searchEngine), [searchEngine]);
+
+  // Sites that put one image per numbered page load (page 1, page 2, ...)
+  // rather than many images on a single page (see pageSequence.ts) — the
+  // button this feeds is only shown when the current URL actually matches.
+  const sequenceInfo = useMemo(
+    () => (isTopPage ? null : extractPageSequenceInfo(currentUrl)),
+    [isTopPage, currentUrl],
+  );
+  const [sequentialPromptVisible, setSequentialPromptVisible] = useState(false);
+  const [sequentialRun, setSequentialRun] = useState<{ startNumber: number; count: number } | null>(
+    null,
+  );
+  const [sequentialProgress, setSequentialProgress] = useState({ done: 0, total: 0 });
+  const sequentialScanContextRef = useRef<{ pageUrl: string; pageTitle: string } | null>(null);
 
   useEffect(() => {
     if (isTopPage) {
@@ -224,6 +246,44 @@ export function BrowserScreen() {
     webViewRef.current?.injectJavaScript(IMAGE_SCAN_SCRIPT);
   };
 
+  const handleSequentialCountSubmit = (value: string) => {
+    setSequentialPromptVisible(false);
+    const parsed = Math.floor(Number(value));
+    if (!sequenceInfo || !Number.isFinite(parsed) || parsed <= 0) {
+      return;
+    }
+    sequentialScanContextRef.current = { pageUrl: currentUrl, pageTitle: title || inputValue };
+    setSequentialProgress({ done: 0, total: Math.min(parsed, MAX_SEQUENTIAL_PAGES) });
+    setSequentialRun({ startNumber: sequenceInfo.number, count: parsed });
+  };
+
+  const handleSequentialComplete = (results: SequentialPageResult[]) => {
+    setSequentialRun(null);
+    if (results.length === 0) {
+      return;
+    }
+    const context = sequentialScanContextRef.current ?? {
+      pageUrl: currentUrl,
+      pageTitle: title || inputValue,
+    };
+    const primaryGroup: DetectedImageGroup = {
+      groupKey: 'sequential-pages',
+      images: results.map((result, index) => ({
+        id: `seq-${index}-${result.pageUrl}`,
+        src: result.imageSrc,
+        width: 0,
+        height: 0,
+        sequenceNumber: index,
+      })),
+    };
+    rootNavigation.navigate('ImageSelection', {
+      pageTitle: context.pageTitle,
+      sourceUrl: context.pageUrl,
+      primaryGroup,
+      otherImages: [],
+    });
+  };
+
   const handleToggleBookmark = async () => {
     if (isTopPage) {
       return;
@@ -280,6 +340,7 @@ export function BrowserScreen() {
       onToggleBookmark={handleToggleBookmark}
       onOpenBookmarks={() => navigation.navigate('Bookmarks')}
       onOpenHistory={() => navigation.navigate('History')}
+      onSequentialSave={sequenceInfo ? () => setSequentialPromptVisible(true) : undefined}
     />
   );
 
@@ -345,6 +406,46 @@ export function BrowserScreen() {
           )}
         </ControlGroup>
       </DraggableLayoutArea>
+
+      <PromptModal
+        visible={sequentialPromptVisible}
+        title="連番ページを収集"
+        placeholder={`件数(最大${MAX_SEQUENTIAL_PAGES})`}
+        initialValue={String(DEFAULT_SEQUENTIAL_COUNT)}
+        submitLabel="開始"
+        onCancel={() => setSequentialPromptVisible(false)}
+        onSubmit={handleSequentialCountSubmit}
+      />
+
+      {sequenceInfo && (
+        <SequentialPageScanner
+          active={sequentialRun !== null}
+          sequenceInfo={sequenceInfo}
+          startNumber={sequentialRun?.startNumber ?? sequenceInfo.number}
+          count={sequentialRun?.count ?? 0}
+          onProgress={(done, total) => setSequentialProgress({ done, total })}
+          onComplete={handleSequentialComplete}
+        />
+      )}
+
+      {sequentialRun && (
+        <View style={styles.sequentialOverlay} pointerEvents="box-none">
+          <View style={[styles.sequentialCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sequentialText, { color: colors.text }]}>
+              連番ページ収集中: {sequentialProgress.done} / {sequentialProgress.total}
+            </Text>
+            <TouchableOpacity
+              style={styles.sequentialCancelButton}
+              onPress={() => setSequentialRun(null)}
+              accessibilityLabel="cancel-sequential-scan"
+            >
+              <Text style={[styles.sequentialCancelText, { color: colors.primary }]}>
+                キャンセル
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -367,5 +468,36 @@ const styles = StyleSheet.create({
   },
   chromeGap: {
     height: 10,
+  },
+  sequentialOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 60,
+    alignItems: 'center',
+  },
+  sequentialCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  sequentialText: {
+    fontSize: 13,
+  },
+  sequentialCancelButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  sequentialCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

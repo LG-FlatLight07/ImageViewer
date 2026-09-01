@@ -19,6 +19,8 @@ type URLBarProps = {
   onToggleBookmark: () => void;
   onOpenBookmarks: () => void;
   onOpenHistory: () => void;
+  /** Only offered when the current page's URL looks like one of a numbered sequence (see pageSequence.ts) — omitted otherwise. */
+  onSequentialSave?: () => void;
 };
 
 export function URLBar({
@@ -36,6 +38,7 @@ export function URLBar({
   onToggleBookmark,
   onOpenBookmarks,
   onOpenHistory,
+  onSequentialSave,
 }: URLBarProps) {
   const { colors } = useAppTheme();
 
@@ -100,6 +103,16 @@ export function URLBar({
       >
         <Ionicons name="download-outline" size={18} color={colors.text} />
       </TouchableOpacity>
+      {onSequentialSave && (
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={onSequentialSave}
+          accessibilityLabel="save-sequential-images"
+          hitSlop={4}
+        >
+          <Ionicons name="layers-outline" size={18} color={colors.text} />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         style={styles.iconButton}
         onPress={onOpenBookmarks}
