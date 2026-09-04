@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -275,18 +283,22 @@ export function FolderListScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.tagSuggestionRow}>
+              <ScrollView
+                style={styles.tagSuggestionScroll}
+                contentContainerStyle={styles.tagSuggestionRow}
+                nestedScrollEnabled
+              >
                 {tagSuggestions.map((name) => (
                   <TouchableOpacity
                     key={name}
                     style={[styles.tagSuggestionChip, { backgroundColor: colors.background }]}
                     onPress={() => addTagFilter(name)}
                   >
-                    <Ionicons name="pricetag-outline" size={12} color={colors.secondaryText} />
+                    <Ionicons name="pricetag-outline" size={11} color={colors.secondaryText} />
                     <Text style={[styles.tagSuggestionText, { color: colors.text }]}>{name}</Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
             </View>
           )}
         </ControlGroup>
@@ -451,17 +463,20 @@ const styles = StyleSheet.create({
   tagSortButtonText: {
     fontSize: 11,
   },
+  tagSuggestionScroll: {
+    maxHeight: 108,
+  },
   tagSuggestionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 4,
   },
   tagSuggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    borderRadius: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
     gap: 3,
   },
   tagSuggestionText: {
