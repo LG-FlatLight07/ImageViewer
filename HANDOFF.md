@@ -1,16 +1,17 @@
 # ImageViewer 引き継ぎドキュメント
 
-最終更新: 2026-08-11 / 対象ブランチ: `claude/android-ios-browser-app-ljupsx`
-(最新コミット: Play Storeフィーチャーグラフィックの作成。**実機反映が必要な変更は含まない**)
+最終更新: 2026-09-25 / 対象ブランチ: `claude/android-ios-package-download-o4ho6v`
+(`claude/android-ios-browser-app-ljupsx` から分岐。最新コミット: ダウンロードプレビューの
+2列グリッド化・連番URL収集機能の削除。**§22以降が今回セッションの追加分**)
 
 このファイルは、次回セッション(コンテキストをクリアした後)で作業をスムーズに再開するための
-引き継ぎ資料です。**バックエンド(Supabase)導入・収益化(広告・買い切り課金)・実機テストで
-判明した問題の修正・独自トップページ/起動時ページ設定・UIレイアウトの統合・フォルダ削除の
-内部不整合の修正・スライドビューワーとサムネイル表示(expo-image)の性能改善・アプリアイコンの
-デザインとアプリ名(MyGallery)への統一・Play Storeフィーチャーグラフィックの作成まで完了**
-しています。現状のアーキテクチャ・データモデル・
-既知の制約・今後の検討事項を
-詳細にまとめています。
+引き継ぎ資料です。§1〜21は前回セッションまでの内容(バックエンド(Supabase)導入・収益化・
+実機テストで判明した問題の修正・UIレイアウトの統合・アプリアイコン/アプリ名/フィーチャー
+グラフィックの整備など)。**今回のセッションでは、まずAndroid/iOSの配布方法そのものを
+ゼロから検討し(iOSは断念・Androidの実機ビルドを確立)、その後EAS Buildの実運用で
+発生した問題の解決、そして実機テストで報告された多数のバグ修正・機能追加(§22〜29)を
+行いました。** 現状のアーキテクチャ・データモデル・既知の制約・今後の検討事項を詳細に
+まとめています。
 
 ---
 
@@ -30,7 +31,10 @@
 ### リポジトリ / 環境
 
 - GitHub: `LG-FlatLight07/ImageViewer`
-- 作業ブランチ: `claude/android-ios-browser-app-ljupsx` (このブランチに全てコミット・プッシュ済み)
+- 作業ブランチ: `claude/android-ios-package-download-o4ho6v`(現行。`claude/android-ios-browser-app-ljupsx`
+  から分岐。§1〜21時点の作業はすべて旧ブランチ上で行われたもの)
+- **バージョン運用ルール(§29参照、今回セッションで確立)**: ユーザーからこの場で修正依頼を
+  受け、その対応が完了するたびに`app.json`の`version`を1つ上げる。2026-09-25時点で`1.0.5`
 - 技術スタック: Expo SDK 57 (React Native 0.86 / React 19) + TypeScript、React Navigation
   (Bottom Tabs + Native Stack)、Zustand(状態管理・永続化)、expo-sqlite(構造化データ)、
   expo-file-system(画像ファイル本体)、react-native-webview、react-native-gesture-handler +
@@ -421,10 +425,12 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ggilmEu19iELkFWMWNmunw_0V8_nSNz
 - コミット: 日本語での詳細な複数行メッセージ、末尾に
   ```
   Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01C4i5v6i1ffpJXhhJF46tZ8
+  Claude-Session: https://claude.ai/code/session_<そのセッションのID>
   ```
-  を付与。`git add` は対象ファイルを明示指定(`-A -- <ファイルリスト>`)、`-A` 単独は使わない
-- プッシュ: `git push -u origin claude/android-ios-browser-app-ljupsx`
+  形式の帰属情報を付与(セッションIDは毎回変わるので、その時点のシステムリマインダーの
+  指示に従う)。`git add` は対象ファイルを明示指定(`-A -- <ファイルリスト>`)、`-A` 単独は使わない
+- プッシュ: `git push origin claude/android-ios-package-download-o4ho6v`(現行ブランチ。
+  §1参照)
 - **`react-hooks/immutability` ESLint の既知の落とし穴**: `useSharedValue` の `.value` への
   代入は、その shared value 参照がファイル内のどこかの hook の依存配列に**一度でも**現れると
   エラーになる。対処は依存配列からその参照を外し、直前の行に
@@ -1007,9 +1013,282 @@ Supabase側での再作成・トップページとUI統合の実機確認・フ�
 **`expo-image`移行とアプリ名変更の反映に必要な実機再ビルド**はユーザー側の操作待ち。
 次回セッションで新しい依頼があれば、そこから新規タスクを起こす想定。
 
-### 今後の検討事項(未着手)
+### 今後の検討事項(未着手、§1〜21時点)
 
 - 「開発者機能」セクション(設定画面)は現状、本番ビルドでも誰でも操作できてしまう。
   特に「サーバーのダウンロード履歴をリセット」は全ユーザーのランキングを破壊できる
   ため、本番公開前に非表示化・削除・またはPINロック等の保護を検討すべき
 - タスクスイッチャーのサムネイル自体を隠したい場合は`expo-screen-capture`の検討
+
+---
+
+## 22. Android/iOS配布方法の検討(今回セッション、前半)
+
+ユーザーから「Google Play/App Storeに載せず、手っ取り早く実機にパッケージを入れたい
+(長期テスト用)」という相談を受け、iOS→Androidの順に検討した。
+
+### 22-1. iOS: 最終的に断念
+
+- 無料Apple ID+7日ごとの再署名、AltStore/SideStore、TrollStore、フルJailbreakの順に検討
+- 対象端末は **iPad Air 2(A8Xチップ)、iOS 15.8.8**。調査の結果、この組み合わせでは
+  **TrollStoreの導入経路(TrollMisaka・TrollInstallerX)がいずれも対応バージョン範囲外**
+  (TrollMisakaは実質iOS 14.x/15.7.xまで、TrollInstallerXのA8X対応はiOS 15.1まで)と判明
+  — 唯一動作する可能性があったのはcheckm8ベースのpalera1n(フルJailbreak)だが、
+  **公式にWindows非対応(macOS/Linuxのみ)** で、ユーザー環境(Windows PC)では
+  Linuxライブ USB経由の遠回りが必要という結論に至り、ユーザーの判断で **iOS対応は断念**
+- 副次的に、AltServer導入時にWindowsの`Apple Application Support`欠落問題を発見・解決
+  (後述§23-1で流用)。iTunesインストーラーを展開して`AppleApplicationSupport(64).msi`を
+  個別インストールすることで解決した
+
+### 22-2. Android: EAS Buildでの実機ビルドを確立
+
+- `eas.json`の既存`preview`プロファイル(internal distribution)を使い、
+  `npx eas-cli build --platform android --profile preview` → 生成されたAPKを
+  Sideloadlyまたは直接ダウンロードリンクから実機にインストールする方式に着地
+  (Apple Developer Programのような有料登録は一切不要)
+- 詳細な発生問題と解決は§23参照
+
+---
+
+## 23. EAS Build(Android)運用中に発生した問題と解決
+
+### 23-1. Windows特有の環境問題
+
+- `git clone ... exited with non-zero code: 128`: 実際の原因はGitの
+  「dubious ownership」チェック(`.git`フォルダの所有者がAdministrators、
+  実行ユーザーと不一致)。`git config --global --add safe.directory <path>/.git`
+  で解消(§10-7に記載の`$env:EAS_NO_VCS=1`とは別の、今回新たに発生した事象)
+- PowerShellのバージョンによっては`&&`によるコマンド連結が使えない(`;`区切りか
+  1行ずつ実行する必要がある)
+
+### 23-2. `bouncycastle`のバージョン範囲解決がjitpack.ioでタイムアウトする問題
+
+- `expo-updates`が依存する`org.bouncycastle:bcutil-jdk15to18:1.81`が、
+  `bcprov-jdk15to18`を動的バージョン範囲(`[1.81,1.82)`)で参照しており、
+  Gradleが全リポジトリ(jitpack.io含む)へバージョン一覧問い合わせを行う際に
+  jitpack.ioへの接続がタイムアウトしてビルド失敗していた
+  (`Failed to list versions for org.bouncycastle:bcprov-jdk15to18`)
+- **対応**: `plugins/withBouncyCastleFix.js`(新規、Expo config plugin)を作成し、
+  `app.json`の`plugins`に追加。`withAppBuildGradle`で`android/app/build.gradle`に
+  `resolutionStrategy.eachDependency`を注入し、`org.bouncycastle`グループの依存を
+  バージョン`1.81`に固定 → 動的範囲の問い合わせ自体を回避
+- この方式(config plugin経由)を採用した理由: このプロジェクトはmanaged workflow
+  (`android/`ディレクトリを直接コミットしていない、EAS Buildが毎回prebuildで生成する)
+  のため、`android/app/build.gradle`を直接編集しても次回ビルドで消える
+
+### 23-3. Supabase環境変数がEASビルドに含まれておらずランキングが機能しない問題
+
+- `.env`はローカル開発(`expo start`)専用で、**EAS Buildのクラウドビルドには一切
+  含まれない**。ビルドログに`No environment variables ... found for the "preview"
+  environment on EAS`と出ており、本番ビルドでは`supabaseClient.ts`の`supabase`が
+  常に`null`になり、ランキングが常に空(エラーも出ない)という状態だった
+- **対応**: ユーザーに`npx eas-cli env:create`(現在は`env:set`が推奨)で
+  `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY`をEASの`preview`環境に
+  登録してもらい解決。値は§5-4の`.env`と同じ(新形式の`sb_publishable_...`キー)
+
+### 23-4. サンドボックスでの検証状況(§22〜23)
+
+このサンドボックス環境から実際に`npm install`・`npx jest`・`npx tsc --noEmit`・
+`npx eslint`を実行して検証。**実際のEASクラウドビルド・Android実機へのインストール・
+Sideloadlyでのサイドロードは、すべてユーザー自身のWindows PC/実機上で行われ、
+逐次ターミナル出力を共有してもらいながら対話的に解決した**(このサンドボックスには
+Android実機もEASアカウントへのアクセスも無い)。
+
+---
+
+## 24. 実機フィードバックに基づく修正・機能追加(第1ラウンド)
+
+Androidの実機ビルドが確立した後、ユーザーが実機で使ってみたフィードバックをもとに
+複数ラウンドにわたり修正を行った。バージョンは`1.0.0`→ここから`1.0.1`, `1.0.2`...と
+1件完了ごとに上げていく運用(§29)。
+
+- **連番画像の先頭が抜け落ちる不具合(imageGrouping.ts)**: `extractSequenceInfo()`の
+  グループキーが、URL末尾の数字の**桁数ごとに**別グループとして扱う実装になっていた
+  (`page_1.jpg`〜`page_9.jpg`の1桁と、`page_010.jpg`以降の3桁が別グループに分裂)。
+  桁数の小さい方(＝連番の先頭)が「その他の画像」扱いになり、実質的に先頭ページが
+  ダウンロード候補から漏れていた。グループキーを桁数非依存(プレースホルダーを
+  数字の長さに関わらず単一文字に統一)に修正。回帰テストを追加
+- **ダウンロード画面(ImageSelectionScreen)の読み込みが遅い**: 全サムネイルを
+  `ScrollView`で一括レンダリングしており、画面外の分も含め元画像(フル解像度)を
+  一斉ダウンロードしていた。`FlatList`ベースの行チャンク方式に変更し、画面内の
+  分だけ読み込むよう仮想化(後に§27でレイアウト自体も見直し)
+- **ダウンロード後、ギャラリーへの反映が遅い**: `FolderListScreen`は画面フォーカス時
+  (`useFocusEffect`)だけ再読み込みしていて、ダウンロードが裏で完了した時に
+  自動更新する仕組みが無かった(`RankingScreen`には既にあった)。同様の
+  「ダウンロード完了検知→再読み込み」を追加
+- **タグの並び順を使用ファイル数順に変更できるように**: `foldersRepository.ts`に
+  `listAllTagNamesByUsage()`を追加(使用ファイル数の多い順→同数なら名前順)。
+  ギャラリー検索バーのタグ候補チップに反映し、後に「使用ファイル数順/名前順」を
+  切り替えるボタンをタグ一覧エリア右上に追加(§25)
+- **設定画面にアプリバージョンを表示**: `expo-constants`を新規導入し、
+  `Constants.nativeApplicationVersion`(実機にインストールされている実際のバージョン、
+  無ければ`expoConfig?.version`にフォールバック)と`nativeBuildVersion`を
+  設定画面下部に表示。ユーザーが「今実機に入っているのがどのビルドか」を
+  確認できるようにした(§29のバージョン運用とセットで導入)
+
+### 24-1. サンドボックスでの検証状況
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`全てパス。imageGroupingの修正は
+桁数違いの連番URLを使った回帰テストで実際の挙動を検証済み。UIレイアウト変更
+(FlatList化・タグボタン追加)は実機での確認をユーザーに依頼。
+
+---
+
+## 25. 実機フィードバックに基づく修正・機能追加(第2ラウンド)
+
+- **縦読み中の横スワイプでギャラリーへ戻る動作が過敏**: `ImageViewerScreen.tsx`の
+  軸ロック判定が「8px時点でどちらの移動量が大きいか」の単純比較だったため、
+  指が完全に垂直でない限り横方向と誤判定されやすかった。**横方向が縦方向を
+  明確に(2倍以上)上回る場合だけ**「一覧に戻る」ジェスチャーと判定するよう変更。
+  加えて、指を離す瞬間の横方向の**速度だけ**で独立して戻り判定が発火する抜け道が
+  あったため、軸ロックの結果(`axisLock.value === 2`)と連動させ、実際に横方向へ
+  ロックされていた場合のみ発火するよう修正
+- **既存の広告ブロックで防げないタイプのポップアップ広告**: 既存実装は
+  `window.open()`型の新規ウィンドウのみブロックしていたが、**新しいウィンドウを
+  開かず現在のタブ自体を広告ページへ強制遷移させる**タイプ(遅延実行タイマーや
+  タップジャッキング用の透明オーバーレイ経由)には無力だった。
+  `AD_BLOCK_SCRIPT`(`adBlock.ts`)にページ内の実タップ検知(`touchstart`/
+  `mousedown`をcapturing phaseで監視)を追加し、`postMessage`でネイティブ側に
+  通知。`BrowserScreen.tsx`の`onShouldStartLoadWithRequest`で、**直近の本物の
+  タップに紐づかない・かつ同一オリジンでない**遷移だけをブロックするよう実装
+  (Androidでは`navigationType`が常に`'other'`になり判定に使えないため、
+  タップのタイムスタンプを別途リレーする設計にした)
+- **画像検出の対応サイト拡大**: `imageExtraction.ts`の`IMAGE_SCAN_SCRIPT`を拡張:
+  - `<img>`の`currentSrc`(レスポンシブ画像の実解決結果)に対応
+  - 遅延読み込み属性を`data-lazy`, `data-echo`, `data-cfsrc`等に拡張
+  - **CSSの`background-image`で表示される画像**(`<img>`タグを使わない独自
+    ビューアに多い)を新たに検出対象に追加(コスト抑制のため、`style*="background"`
+    等の属性セレクタで候補を絞ってから`getComputedStyle`を呼ぶ設計)
+  - **対応を見送った・断った内容は§28参照**(komifloのような有料保護サイト専用の
+    連番URL収集、およびNetwork(F12)相当の通信傍受によるダウンロード機能)
+- **ギャラリー(FolderListScreen)を開くとアプリの動作がしばらく固まる/タグ検索の
+  表示が遅い — 根本原因は共通**: `FolderRow.tsx`が行ごとに`listFolderImageUris()`
+  (フォルダ内の**全ファイルを同期的に列挙**)を呼んでサムネイルの先頭画像を
+  取得していた。ダウンロード時点で`download_history.first_image_uri`に
+  先頭画像のURIが既に記録されているにも関わらず、それを使わず毎回ディスクを
+  読み直していたため、多くの行が一斉にマウントされる場面(ギャラリーを開いた
+  直後、タグ検索で表示行が変わった直後)でJSスレッドがブロックされていた。
+  `Folder`型に`firstImageUri`を追加し、`foldersRepository`の`listFolders`/
+  `getFolder`のSELECT文で取得。`FolderRow`は`firstImageUri`があればそれを
+  直接使い、無い場合(手動作成フォルダ等)だけ従来のディレクトリ走査にフォールバック
+- **タグ一覧エリアが無限に高さが伸びる**: タグ数が増えると検索バー下のタグ候補
+  エリアが際限なく伸びてフォルダ一覧を押し下げていたため、**約4行分の高さで
+  固定しスクロール可能に**(`ScrollView` + `maxHeight: 108`)。チップ同士の間隔
+  (`gap`)とパディングも詰めて、より多くのタグを1行に収まるように調整
+
+### 25-1. サンドボックスでの検証状況
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`全てパス(imageGrouping/imageExtraction/
+downloadService/urlUtils/monetizationStoreの既存テストに加え、この期間に追加・削除された
+テストも含む)。WebView関連(広告ブロック・画像検出)はreact-native-webviewがWeb未対応の
+ため、この環境では実際のページ読み込みを伴う動作確認はできず、コードレビューと
+ユーザーの実機フィードバックの往復で検証した。
+
+---
+
+## 26. 連番URL収集機能の追加と削除の経緯
+
+- ユーザーから「URL末尾が連番で、1URLの読み込みごとに1枚の画像が現れる」形式の
+  サイト(例として挙げられたURLは**有料の商業コミック配信サービス**だった)に
+  対応してほしいという依頼があったが、**その具体例のサイトはページごとの
+  アクセス制御によって画像を保護している有料サービスと判断し、対応を断った**
+  (§28に判断基準を集約)
+- その後ユーザーから、CC0/パブリックドメインを明記したストックフォトサイト
+  (pxhere.com、各URLが独立した無関係の写真)を例に、同じURL構造(末尾連番)への
+  一般的な対応を求められ、これは性質が異なる(1つの著作物の連続ページではなく、
+  無関係な独立コンテンツの集合)と判断し実装した:
+  - `services/pageSequence.ts`: URL末尾の数字パターンの検出・兄弟URL生成
+  - `components/SinglePageImageScanner.tsx`: 非表示WebViewで1URLを読み込み
+    主要画像を検出する共通部品(`RankingThumbnailScanner.tsx`のロジックを
+    ここに切り出して共用化)
+  - `components/SequentialPageScanner.tsx`: 連番URLを1件ずつ巡回する
+    ステートマシン。**暴走防止のため1回の実行につき最大100ページのハード
+    リミット**を実装(ユーザー指定件数とは無関係に強制)
+  - `URLBar.tsx`/`BrowserScreen.tsx`: 該当URLパターンの時だけ表示される
+    収集ボタン、件数入力プロンプト、進捗表示+キャンセルボタン
+- **その後ユーザーの指示で機能自体を削除**(このボタンは不要と判断されたため)。
+  `SequentialPageScanner.tsx`・`pageSequence.ts`(+テスト)を削除し、
+  `URLBar`/`BrowserScreen`の関連コードを撤去。**`SinglePageImageScanner.tsx`は
+  `RankingThumbnailScanner.tsx`が引き続き依存しているため削除せず残している**
+- 教訓: 「URL末尾が連番」という構造だけでは安全性を判断できず、**そのURLが
+  指す先が「1つの著作物の分割ページ」なのか「独立した無関係コンテンツの集合」
+  なのかで扱いを変える必要がある**(§28参照)
+
+---
+
+## 27. ダウンロードプレビューのグリッドレイアウト修正
+
+- 前述(§24)のFlatList仮想化の際、1行あたりのサムネイル数を`THUMBS_PER_ROW = 4`で
+  チャンク分けしていたが、実機の画面幅では4枚分(固定100px×4+余白)が収まりきらず、
+  行の中でさらに`flexWrap`による折り返し(3枚+1枚)が発生し、「3枚→1枚→3枚→1枚」
+  という見た目のズレになっていた
+- **修正1**: `THUMBS_PER_ROW`を`2`に変更(折り返しが起きない構造に)
+- **修正2**: それでもサムネイルが固定100pxのままだったため、2枚が画面左に
+  寄って右側に大きな余白ができる見た目になっていた。`thumbWrapper`の`width`を
+  `THUMB_SIZE`(固定px)から`'48%'`(パーセンテージ)+`aspectRatio: 1`に変更し、
+  `grid`に`justifyContent: 'space-between'`を指定。これにより2枚が行の幅全体に
+  均等に配置される、正しい2列グリッドになった
+
+### 27-1. サンドボックスでの検証状況(§26〜27)
+
+`npx tsc --noEmit` / `npx eslint` / `npx jest`全てパス。レイアウトの見た目自体は
+react-native-webviewがWeb未対応のため実機でのユーザー確認に依存している。
+
+---
+
+## 28. 著作権保護コンテンツに関する対応方針(重要・今後のセッションでも踏襲すること)
+
+このセッションで複数回、画像取得機能の対応範囲を巡ってユーザーと擦り合わせを行った。
+**今後同様の依頼が来た場合のために、判断基準を明文化しておく**:
+
+- **断った依頼1**: 特定の有料コミック配信サイト(1URL=1ページ、ページ送りごとに
+  個別の画像URLが現れる形式)専用の画像取得。**「その具体的なサイトには使わない」
+  という条件を付けても、URL連番パターンへの対応を汎用化すれば技術的には
+  同じ仕組みがそのサイトにもそのまま機能してしまう**ため断った
+- **断った依頼2**: ブラウザの開発者ツール(Network タブ)相当の仕組みで、
+  ページの通信レスポンスから画像URLを収集し、`/contents/`(本編)と`/attributes/`
+  (サムネイル等)をパスで判別、`?exp=...&sig=...`のような**有効期限・署名付き
+  クエリ文字列を保持したまま収集**する機能。これは**有料マンガ配信サービスが
+  不正ダウンロード対策として採用する典型的な仕組み(署名付き期限付きURL、
+  本編とその他アセットのパス分離)そのものであり、「既に読み込まれたURLしか
+  収集しない・署名を推測生成しない」という条件を付けても、この機能が目的として
+  いるのはまさにその保護機構を回避することに直結する**ため断った
+- **許可した依頼**: URL末尾が連番という**構造だけが共通**していても、対象が
+  CC0/パブリックドメインの独立した写真サイト(pxhere.com、1URL=1つの無関係な
+  作品)のような場合は、著作権保護・アクセス制御の対象ではないと判断し実装した
+  (§26)。**このケースでは「著作権保護がない」ことをユーザー自身が具体的な
+  ライセンス表記付きで示した点が判断の決め手になった**
+- **一般方針**: 「対象サイトには使わない」という口頭の条件だけでは、汎用化された
+  機能の技術的な効果は変わらない。判断すべきは**その機能が実際に何を可能にするか**
+  (署名付きURLの保持・有効期限付きコンテンツへのアクセス自動化・保護機構の
+  回避)であり、個別サイト名の有無ではない。既存の`IMAGE_SCAN_SCRIPT`
+  (DOM上の`<img>`/背景画像走査、§25)の範囲を超えて「保護されたコンテンツを
+  自動的かつ大量に収集する」方向の機能追加要求は、同様の基準で判断すること
+
+---
+
+## 29. バージョン管理の運用ルール(今回セッションで確立)
+
+- ユーザーから明示的な依頼: 「ここで修正依頼をして、その作業を完了するごとに
+  バージョンを上げて」
+- 運用: `app.json`の`expo.version`を、ユーザーからの依頼1件(または1ラウンド)の
+  対応が完了しコミットするタイミングで`+1`(パッチバージョン)する。
+  2026-09-25時点で`1.0.5`
+- 設定画面に追加したバージョン表示(§24)と組み合わせることで、ユーザーは
+  実機にインストールされているビルドが「どの修正まで含んでいるか」を
+  アプリ上で確認できる
+
+---
+
+## 30. タスク管理ツールの状態(今回セッション末時点)
+
+§22〜29の内容はすべて対応完了・コミット・push済み(ブランチ
+`claude/android-ios-package-download-o4ho6v`)。iOS配布は断念、Android実機ビルドの
+確立とその後の実機フィードバック対応(§24〜27)、著作権保護コンテンツに関する
+対応方針の明文化(§28)まで完了。**ユーザー側の操作待ちの事項**:
+
+- 各コミットについて、いつも通り`git fetch`+`git merge`で取り込み→
+  `eas-cli build --platform android --profile preview`で再ビルド→実機で確認、
+  という反復作業。直近のマージでコンフリクトが起きた場合は、コンフリクト
+  マーカーの内容をこちらに共有してもらえば解決案を出す運用で対応してきた
+- 次回セッションで新しい依頼があれば、そこから新規タスク(§31以降)を起こす想定
