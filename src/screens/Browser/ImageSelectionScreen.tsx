@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import {
 } from '../../store/monetizationStore';
 import { RewardedAdButton } from '../../components/RewardedAdButton';
 import { useAppTheme } from '../../theme/theme';
+import { removePreview, verifyNetworkImage } from '../../services/verifyNetworkImage';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
 const DOWNLOAD_LIMIT_MESSAGE =
@@ -113,9 +114,44 @@ export function ImageSelectionScreen() {
     ? '無制限'
     : `残り${getRemainingFreeDownloads(monetizationEntitlement)}回`;
 
-  const allImages = useMemo<DetectedImage[]>(
+  const candidates = useMemo<DetectedImage[]>(
     () => [...(primaryGroup?.images ?? []), ...otherImages],
     [primaryGroup, otherImages],
+  );
+
+  const [verified, setVerified] = useState<Record<string, string>>({});
+  const [checkedCount, setCheckedCount] = useState(0);
+  useEffect(() => {
+    if (collectionKind !== 'network') return;
+    const controller = new AbortController();
+    const previews: string[] = [];
+    let next = 0;
+    async function worker() {
+      while (!controller.signal.aborted && next < candidates.length) {
+        const candidate = candidates[next++];
+        const result = await verifyNetworkImage(candidate.src, sourceUrl, controller.signal);
+        if (controller.signal.aborted) {
+          if (result) removePreview(result.previewUri);
+          return;
+        }
+        if (result) {
+          previews.push(result.previewUri);
+          setVerified((prev) => ({ ...prev, [candidate.id]: result.previewUri }));
+        }
+        setCheckedCount((prev) => prev + 1);
+      }
+    }
+    void worker();
+    void worker();
+    return () => {
+      controller.abort();
+      previews.forEach(removePreview);
+    };
+  }, [candidates, collectionKind, sourceUrl]);
+  const allImages = useMemo(
+    () =>
+      collectionKind === 'network' ? candidates.filter((image) => verified[image.id]) : candidates,
+    [candidates, collectionKind, verified],
   );
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -148,6 +184,15 @@ export function ImageSelectionScreen() {
   // thumbnails) and starving the ones actually on screen.
   const listRows = useMemo<ListRow[]>(() => {
     const rows: ListRow[] = [];
+    if (collectionKind === 'network') {
+      rows.push({
+        type: 'header',
+        key: 'verified',
+        title: `内容を確認できた画像 (${allImages.length}件)`,
+      });
+      rows.push(...chunkIntoRows(allImages, 'verified'));
+      return rows;
+    }
     if (primaryGroup && primaryGroup.images.length > 0) {
       rows.push({
         type: 'header',
@@ -165,7 +210,7 @@ export function ImageSelectionScreen() {
       rows.push(...chunkIntoRows(otherImages, 'other'));
     }
     return rows;
-  }, [primaryGroup, otherImages, collectionKind]);
+  }, [primaryGroup, otherImages, collectionKind, allImages]);
 
   // Guards against duplicate folders/ranking entries from a rapid double-tap
   // firing this handler more than once before the screen unmounts.
@@ -227,7 +272,7 @@ export function ImageSelectionScreen() {
         activeOpacity={0.8}
       >
         <Image
-          source={{ uri: image.src }}
+          source={{ uri: collectionKind === 'network' ? verified[image.id] : image.src }}
           style={styles.thumbImage}
           contentFit="cover"
           cachePolicy="memory-disk"
@@ -292,7 +337,7 @@ export function ImageSelectionScreen() {
         ListHeaderComponent={
           collectionKind === 'network' ? (
             <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-              同じタブ・サイトで収集した候補です。保存する画像を確認してください。収集履歴はブラウザーの雲形ボタンを長押しするとクリアできます。
+              {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
             </Text>
           ) : null
         }
