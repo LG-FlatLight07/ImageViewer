@@ -64,13 +64,14 @@ async function reportDownloadFailure(
   }
 }
 
-const THUMB_SIZE = 100;
 // Chunking (not flexWrap) is what actually defines the columns here — see
-// chunkIntoRows below. This used to be 4, but 4×THUMB_SIZE plus gaps
-// doesn't fit most phone widths, so flexWrap inside each chunk's row View
-// silently wrapped it again (3 thumbnails, then the 4th alone on its own
-// line), producing an alternating 3-then-1 layout instead of a clean grid.
-// Always chunking into pairs sidesteps that entirely.
+// chunkIntoRows below. This used to be 4, but 4 fixed-size thumbnails plus
+// gaps doesn't fit most phone widths, so flexWrap inside each chunk's row
+// View silently wrapped it again (3 thumbnails, then the 4th alone on its
+// own line), producing an alternating 3-then-1 layout instead of a clean
+// grid. Always chunking into pairs sidesteps that entirely; each
+// thumbnail's width is then a percentage (see thumbWrapper) so the pair
+// spreads evenly across the row instead of sitting at a fixed pixel size.
 const THUMBS_PER_ROW = 2;
 
 type ListRow =
@@ -386,12 +387,11 @@ const styles = StyleSheet.create({
   },
   grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    justifyContent: 'space-between',
   },
   thumbWrapper: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
+    width: '48%',
+    aspectRatio: 1,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#eee',
