@@ -39,13 +39,16 @@ export function FolderRow({
   // thread and freezing the UI, so it's now the exception rather than the
   // rule.
   const [scannedThumbnailUri, setScannedThumbnailUri] = useState<string | null>(null);
-  const thumbnailUri = folder.firstImageUri ?? scannedThumbnailUri;
+  const [failedThumbnailUri, setFailedThumbnailUri] = useState<string | null>(null);
+  const recordedThumbnail =
+    folder.firstImageUri !== failedThumbnailUri ? folder.firstImageUri : null;
+  const thumbnailUri = recordedThumbnail ?? scannedThumbnailUri;
   const swipeableRef = useRef<Swipeable>(null);
   const coordinator = useSwipeRowCoordinator();
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (folder.firstImageUri !== null) {
+    if (recordedThumbnail) {
       return;
     }
     let cancelled = false;
@@ -57,7 +60,7 @@ export function FolderRow({
     return () => {
       cancelled = true;
     };
-  }, [folder]);
+  }, [folder, recordedThumbnail]);
 
   useEffect(
     () => () => {
@@ -125,6 +128,7 @@ export function FolderRow({
             style={styles.thumbnail}
             contentFit="cover"
             cachePolicy="memory-disk"
+            onError={() => setFailedThumbnailUri(thumbnailUri)}
           />
         ) : (
           <View

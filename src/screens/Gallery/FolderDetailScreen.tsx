@@ -20,7 +20,7 @@ import {
   renameFolder,
   setFolderTags,
 } from '../../db/foldersRepository';
-import { deleteFolderFiles, deleteImageFiles, listFolderImageUris } from '../../db/folderImages';
+import { deleteFolderFiles, deleteFolderImages, listFolderImageUris } from '../../db/folderImages';
 import { confirmDelete, confirmDeleteFolder } from '../../utils/confirmDeleteFolder';
 import { FolderRow } from '../../components/FolderRow';
 import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
@@ -55,7 +55,7 @@ export function FolderDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
   const rootNavigation = useRootNavigation();
   const route = useRoute<RouteProp<GalleryStackParamList, 'FolderDetail'>>();
-  const { folderId } = route.params;
+  const { folderId, folderOrder } = route.params;
   const { colors } = useAppTheme();
   const openTab = useBrowserStore((state) => state.openTab);
   const headerAnchor = useLayoutStore((state) => state.layouts[HEADER_SCREEN_ID]?.anchor);
@@ -127,14 +127,14 @@ export function FolderDetailScreen() {
 
   const handleDeleteSelectedImages = () => {
     const targets = Array.from(selectedUris);
-    if (targets.length === 0) {
+    if (targets.length === 0 || !folder) {
       return;
     }
     confirmDelete({
       title: '選択した画像を削除しますか?',
       message: `${targets.length}枚の画像を削除します。この操作は元に戻せません。`,
       onConfirm: async () => {
-        await deleteImageFiles(targets);
+        await deleteFolderImages(db, folder, targets);
         setSelectionMode(false);
         setSelectedUris(new Set());
         reload();
@@ -189,7 +189,10 @@ export function FolderDetailScreen() {
                       <FolderRow
                         folder={item.folder}
                         onPress={() =>
-                          navigation.push('FolderDetail', { folderId: item.folder.id })
+                          navigation.push('FolderDetail', {
+                            folderId: item.folder.id,
+                            folderOrder: subfolders.map((child) => child.id),
+                          })
                         }
                         onOpenMenu={() => setMenuFolder(item.folder)}
                         onDelete={() => handleDeleteSubfolder(item.folder)}
@@ -207,7 +210,11 @@ export function FolderDetailScreen() {
                     onPress={() =>
                       selectionMode
                         ? toggleImageSelected(item.uri)
-                        : navigation.navigate('ImageViewer', { folderId, startIndex: item.index })
+                        : navigation.navigate('ImageViewer', {
+                            folderId,
+                            startIndex: item.index,
+                            folderOrder,
+                          })
                     }
                   >
                     <Image

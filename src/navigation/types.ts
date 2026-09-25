@@ -27,6 +27,6 @@ export type BrowserStackParamList = {
 
 export type GalleryStackParamList = {
   FolderList: undefined;
-  FolderDetail: { folderId: string };
-  ImageViewer: { folderId: string; startIndex: number };
+  FolderDetail: { folderId: string; folderOrder?: string[] };
+  ImageViewer: { folderId: string; startIndex: number; folderOrder?: string[] };
 };

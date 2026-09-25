@@ -13,6 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 
 import { useRootNavigation } from '../../navigation/useRootNavigation';
 import { submitFeedbackMessage } from '../../db/feedbackRepository';
@@ -58,9 +59,8 @@ const FEEDBACK_TOAST_MS = 3000;
 // `nativeApplicationVersion`/`nativeBuildVersion` reflect the actual
 // installed native build (reliable in an EAS build); `expoConfig?.version`
 // is a fallback for contexts where those aren't populated (e.g. Expo Go).
-const APP_VERSION =
-  Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '不明';
-const BUILD_NUMBER = Constants.nativeBuildVersion;
+const APP_VERSION = Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '不明';
+const BUILD_NUMBER = Application.nativeBuildVersion;
 
 export function SettingsScreen() {
   const { colors } = useAppTheme();

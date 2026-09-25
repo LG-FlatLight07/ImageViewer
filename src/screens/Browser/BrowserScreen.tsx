@@ -274,8 +274,16 @@ export function BrowserScreen() {
       onChangeValue={setInputValue}
       onSubmit={handleSubmit}
       onReload={() => (loading ? webViewRef.current?.stopLoading() : webViewRef.current?.reload())}
-      onGoBack={() => webViewRef.current?.goBack()}
-      onGoForward={() => webViewRef.current?.goForward()}
+      onGoBack={() => {
+        if (!canGoBack || !webViewRef.current) return;
+        pendingExplicitNavigationRef.current = true;
+        webViewRef.current.goBack();
+      }}
+      onGoForward={() => {
+        if (!canGoForward || !webViewRef.current) return;
+        pendingExplicitNavigationRef.current = true;
+        webViewRef.current.goForward();
+      }}
       onSaveImages={handleSaveImages}
       onToggleBookmark={handleToggleBookmark}
       onOpenBookmarks={() => navigation.navigate('Bookmarks')}

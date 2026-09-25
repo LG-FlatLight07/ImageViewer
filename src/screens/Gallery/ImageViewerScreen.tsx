@@ -24,8 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { GalleryStackParamList } from '../../navigation/types';
-import { getFolder, listFolders } from '../../db/foldersRepository';
-import { listFolderImageUris } from '../../db/folderImages';
+import { listViewerImages } from '../../db/viewerImages';
 import { useSettingsStore } from '../../store/settingsStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -77,34 +76,14 @@ export function ImageViewerScreen() {
   const db = useSQLiteContext();
   const navigation = useNavigation<NativeStackNavigationProp<GalleryStackParamList>>();
   const route = useRoute<RouteProp<GalleryStackParamList, 'ImageViewer'>>();
-  const { folderId, startIndex } = route.params;
+  const { folderId, startIndex, folderOrder } = route.params;
   const direction = useSettingsStore((state) => state.imageViewerDirection);
 
   const [pages, setPages] = useState<PageItem[]>([]);
 
   const load = useCallback(async () => {
-    const folder = await getFolder(db, folderId);
-    const currentImages = await listFolderImageUris(folder);
-    const currentItems = currentImages.map((uri) => ({ uri, folderId }));
-
-    if (!folder) {
-      setPages(await buildPages(currentItems));
-      return;
-    }
-
-    const siblings = await listFolders(db, { parentId: folder.parentId, sortKey: 'name' });
-    const ownIndex = siblings.findIndex((sibling) => sibling.id === folderId);
-    const nextFolder = ownIndex >= 0 ? siblings[ownIndex + 1] : undefined;
-
-    if (!nextFolder) {
-      setPages(await buildPages(currentItems));
-      return;
-    }
-
-    const nextImages = await listFolderImageUris(nextFolder);
-    const nextItems = nextImages.map((uri) => ({ uri, folderId: nextFolder.id }));
-    setPages(await buildPages([...currentItems, ...nextItems]));
-  }, [db, folderId]);
+    setPages(await buildPages(await listViewerImages(db, folderId, folderOrder)));
+  }, [db, folderId, folderOrder]);
 
   useEffect(() => {
     // Initial data load for this screen instance; load() internally calls setState.

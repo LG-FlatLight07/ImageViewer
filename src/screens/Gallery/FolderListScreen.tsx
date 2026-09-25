@@ -186,7 +186,12 @@ export function FolderListScreen() {
             renderItem={({ item }) => (
               <FolderRow
                 folder={item}
-                onPress={() => navigation.navigate('FolderDetail', { folderId: item.id })}
+                onPress={() =>
+                  navigation.navigate('FolderDetail', {
+                    folderId: item.id,
+                    folderOrder: folders.map((folder) => folder.id),
+                  })
+                }
                 onOpenMenu={() => setMenuFolder(item)}
                 onDelete={() => handleDelete(item)}
                 onJumpToSource={item.sourceUrl ? () => handleJumpToSource(item) : undefined}
