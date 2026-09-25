@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
@@ -24,6 +24,13 @@ import type { BrowserStackParamList } from '../../navigation/types';
 import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 import { useAppTheme } from '../../theme/theme';
+import {
+  MAX_NETWORK_IMAGES,
+  NETWORK_IMAGE_SCRIPT,
+  NetworkImageCollection,
+  networkImageSnapshotScript,
+  parseNetworkImageMessage,
+} from '../../services/networkImages';
 
 const CHROME_SCREEN_ID = 'browser.chrome';
 const CHROME_GAP = 16;
@@ -57,6 +64,54 @@ export function BrowserScreen() {
   const [chromeHeight, setChromeHeight] = useState(0);
   const isTopPage = url === TOP_PAGE_URL;
   const topPageHtml = useMemo(() => buildTopPageHtml(searchEngine), [searchEngine]);
+  const networkImages = useRef(new NetworkImageCollection());
+  const pendingNetworkScan = useRef<{
+    id: string;
+    tabId: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  useEffect(() => {
+    networkImages.current.retain(tabs.map((tab) => tab.id));
+  }, [tabs]);
+  useEffect(
+    () => () => {
+      if (pendingNetworkScan.current) clearTimeout(pendingNetworkScan.current.timer);
+      pendingNetworkScan.current = null;
+    },
+    [activeTabId],
+  );
+
+  const handleSaveNetworkImages = () => {
+    if (isTopPage || !webViewRef.current || pendingNetworkScan.current) return;
+    const id = `${activeTabId}-${Date.now()}`;
+    const timer = setTimeout(() => {
+      pendingNetworkScan.current = null;
+      Alert.alert(
+        '通信画像の確認',
+        'ページから応答がありません。読み込み完了後にもう一度お試しください。',
+      );
+    }, 5000);
+    pendingNetworkScan.current = { id, tabId: activeTabId, timer };
+    webViewRef.current.injectJavaScript(networkImageSnapshotScript(id));
+  };
+
+  const handleClearNetworkImages = () => {
+    Alert.alert(
+      '収集履歴をクリア',
+      'このタブで収集したURLをクリアします。次に読み込まれる画像から再び収集します。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: 'クリア',
+          onPress: () => {
+            networkImages.current.clear(activeTabId);
+            webViewRef.current?.injectJavaScript('window.__myGalleryNetworkImages?.clear(); true;');
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (isTopPage) {
@@ -132,6 +187,7 @@ export function BrowserScreen() {
   };
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
+    networkImages.current.navigate(activeTabId, navState.url);
     if (isTopPage) {
       // The built-in top page is loaded via `source={{ html }}`, so WebView
       // reports "about:blank" for it. Only a real navigation away from it
@@ -242,6 +298,51 @@ export function BrowserScreen() {
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
+    const networkMessage = parseNetworkImageMessage(event.nativeEvent.data);
+    if (networkMessage) {
+      // Reject stale documents after navigating to another site.
+      try {
+        const browser = useBrowserStore.getState();
+        if (browser.activeTabId !== activeTabId) return;
+        const liveTab = browser.tabs.find((tab) => tab.id === activeTabId);
+        if (
+          !liveTab ||
+          new URL(liveTab.currentUrl).origin !== new URL(networkMessage.pageUrl).origin
+        )
+          return;
+        if (new URL(networkMessage.pageUrl).origin !== new URL(event.nativeEvent.url).origin)
+          return;
+      } catch {
+        return;
+      }
+      const images = networkImages.current.merge(activeTabId, networkMessage);
+      const pending = pendingNetworkScan.current;
+      if (pending && pending.tabId === activeTabId && pending.id === networkMessage.requestId) {
+        clearTimeout(pending.timer);
+        pendingNetworkScan.current = null;
+        if (!images.length) {
+          Alert.alert(
+            '本編画像が見つかりません',
+            'ページを表示・操作してから再度お試しください。/contents/ の画像を収集します。取得できない通信もあります。',
+          );
+          return;
+        }
+        if (images.length >= MAX_NETWORK_IMAGES) {
+          Alert.alert(
+            '収集上限',
+            `最大${MAX_NETWORK_IMAGES}件までの画像を表示します。保存後、ボタンを長押しすると履歴をクリアできます。`,
+          );
+        }
+        rootNavigation.navigate('ImageSelection', {
+          pageTitle: networkMessage.pageTitle || title,
+          sourceUrl: networkMessage.pageUrl,
+          primaryGroup: { groupKey: 'network-contents', images },
+          otherImages: [],
+          collectionKind: 'network',
+        });
+      }
+      return;
+    }
     if (isUserGestureMessage(event.nativeEvent.data)) {
       lastGestureAtRef.current = Date.now();
       return;
@@ -285,6 +386,8 @@ export function BrowserScreen() {
         webViewRef.current.goForward();
       }}
       onSaveImages={handleSaveImages}
+      onSaveNetworkImages={handleSaveNetworkImages}
+      onClearNetworkImages={handleClearNetworkImages}
       onToggleBookmark={handleToggleBookmark}
       onOpenBookmarks={() => navigation.navigate('Bookmarks')}
       onOpenHistory={() => navigation.navigate('History')}
@@ -320,12 +423,16 @@ export function BrowserScreen() {
           ]}
           onNavigationStateChange={handleNavigationStateChange}
           onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => setLoading(false)}
+          onLoadEnd={() => {
+            setLoading(false);
+            webViewRef.current?.injectJavaScript(NETWORK_IMAGE_SCRIPT);
+          }}
           onMessage={handleMessage}
           onShouldStartLoadWithRequest={handleShouldStartLoad}
           startInLoadingState
           incognito={disableHistory}
-          injectedJavaScriptBeforeContentLoaded={adBlockEnabled ? AD_BLOCK_SCRIPT : undefined}
+          injectedJavaScriptBeforeContentLoaded={`${NETWORK_IMAGE_SCRIPT}\n${adBlockEnabled ? AD_BLOCK_SCRIPT : ''}`}
+          injectedJavaScript={NETWORK_IMAGE_SCRIPT}
           setSupportMultipleWindows={!adBlockEnabled}
           onOpenWindow={adBlockEnabled ? () => {} : undefined}
         />

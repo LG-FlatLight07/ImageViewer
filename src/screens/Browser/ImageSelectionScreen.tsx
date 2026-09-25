@@ -101,7 +101,7 @@ export function ImageSelectionScreen() {
   const rewardedAdDate = useMonetizationStore((state) => state.rewardedAdDate);
   const dailyDownloadDate = useMonetizationStore((state) => state.dailyDownloadDate);
   const dailyDownloadUsed = useMonetizationStore((state) => state.dailyDownloadUsed);
-  const { pageTitle, sourceUrl, primaryGroup, otherImages } = route.params;
+  const { pageTitle, sourceUrl, primaryGroup, otherImages, collectionKind } = route.params;
 
   const monetizationEntitlement = {
     purchasedPremium,
@@ -152,7 +152,7 @@ export function ImageSelectionScreen() {
       rows.push({
         type: 'header',
         key: 'header-primary',
-        title: `検出された連番画像 (${primaryGroup.images.length}件)`,
+        title: `${collectionKind === 'network' ? '通信から収集した本編画像候補' : '検出された連番画像'} (${primaryGroup.images.length}件)`,
       });
       rows.push(...chunkIntoRows(primaryGroup.images, 'primary'));
     }
@@ -165,7 +165,7 @@ export function ImageSelectionScreen() {
       rows.push(...chunkIntoRows(otherImages, 'other'));
     }
     return rows;
-  }, [primaryGroup, otherImages]);
+  }, [primaryGroup, otherImages, collectionKind]);
 
   // Guards against duplicate folders/ranking entries from a rapid double-tap
   // firing this handler more than once before the screen unmounts.
@@ -289,6 +289,13 @@ export function ImageSelectionScreen() {
         data={listRows}
         keyExtractor={(row) => row.key}
         renderItem={renderRow}
+        ListHeaderComponent={
+          collectionKind === 'network' ? (
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+              同じタブ・サイトで収集した候補です。保存する画像を確認してください。収集履歴はブラウザーの雲形ボタンを長押しするとクリアできます。
+            </Text>
+          ) : null
+        }
         // A handful of screens' worth up front so the initial view (and a
         // quick scroll) never shows an empty gap while images decode.
         initialNumToRender={6}

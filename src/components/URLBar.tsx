@@ -16,6 +16,8 @@ type URLBarProps = {
   onGoBack: () => void;
   onGoForward: () => void;
   onSaveImages: () => void;
+  onSaveNetworkImages: () => void;
+  onClearNetworkImages: () => void;
   onToggleBookmark: () => void;
   onOpenBookmarks: () => void;
   onOpenHistory: () => void;
@@ -33,6 +35,8 @@ export function URLBar({
   onGoBack,
   onGoForward,
   onSaveImages,
+  onSaveNetworkImages,
+  onClearNetworkImages,
   onToggleBookmark,
   onOpenBookmarks,
   onOpenHistory,
@@ -99,6 +103,16 @@ export function URLBar({
         hitSlop={4}
       >
         <Ionicons name="download-outline" size={18} color={colors.text} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.iconButton}
+        onPress={onSaveNetworkImages}
+        onLongPress={onClearNetworkImages}
+        accessibilityLabel="通信から本編画像を保存"
+        accessibilityHint="読み込んだ本編画像を確認します。長押しで収集履歴をクリアします"
+        hitSlop={4}
+      >
+        <Ionicons name="cloud-download-outline" size={18} color={colors.text} />
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.iconButton}
