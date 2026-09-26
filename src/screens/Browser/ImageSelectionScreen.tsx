@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,9 @@ import {
 import { RewardedAdButton } from '../../components/RewardedAdButton';
 import { useAppTheme } from '../../theme/theme';
 import { removePreview, verifyNetworkImage } from '../../services/verifyNetworkImage';
+import { matchesContentsFilter } from '../../services/contentsFilter';
+import { useContentsFilterStore } from '../../store/contentsFilterStore';
+import { ContentsFilterPanel } from '../../components/ContentsFilterPanel';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
 const DOWNLOAD_LIMIT_MESSAGE =
@@ -91,7 +94,33 @@ function chunkIntoRows(images: DetectedImage[], keyPrefix: string): ListRow[] {
   return rows;
 }
 
+const subscribeFilterHydration = (callback: () => void) =>
+  useContentsFilterStore.persist.onFinishHydration(callback);
+
 export function ImageSelectionScreen() {
+  const hydrated = useSyncExternalStore(
+    subscribeFilterHydration,
+    useContentsFilterStore.persist.hasHydrated,
+    () => false,
+  );
+  // Do not start downloads before the saved default has been restored.
+  return hydrated ? <ImageSelectionSession /> : <View />;
+}
+
+function ImageSelectionSession() {
+  const defaultFilter = useContentsFilterStore((state) => state.defaultFilter);
+  const [filter, setFilter] = useState(defaultFilter);
+  // A new verification session cancels old requests and clears stale preview/selection state.
+  return <ImageSelectionContent key={filter} networkFilter={filter} onFilterChange={setFilter} />;
+}
+
+function ImageSelectionContent({
+  networkFilter,
+  onFilterChange,
+}: {
+  networkFilter: string;
+  onFilterChange: (value: string) => void;
+}) {
   const route = useRoute<RouteProp<RootStackParamList, 'ImageSelection'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const db = useSQLiteContext();
@@ -115,8 +144,11 @@ export function ImageSelectionScreen() {
     : `残り${getRemainingFreeDownloads(monetizationEntitlement)}回`;
 
   const candidates = useMemo<DetectedImage[]>(
-    () => [...(primaryGroup?.images ?? []), ...otherImages],
-    [primaryGroup, otherImages],
+    () =>
+      [...(primaryGroup?.images ?? []), ...otherImages].filter(
+        (image) => collectionKind !== 'network' || matchesContentsFilter(image.src, networkFilter),
+      ),
+    [primaryGroup, otherImages, collectionKind, networkFilter],
   );
 
   const [verified, setVerified] = useState<Record<string, string>>({});
@@ -175,6 +207,7 @@ export function ImageSelectionScreen() {
 
   const selectAll = () => setSelectedIds(new Set(allImages.map((image) => image.id)));
   const clearAll = () => setSelectedIds(new Set());
+  const selectedCount = allImages.filter((image) => selectedIds.has(image.id)).length;
 
   // Rows (not individual images) are what FlatList virtualizes here, so that
   // only thumbnails near the viewport ever mount an <Image> and start
@@ -311,7 +344,7 @@ export function ImageSelectionScreen() {
 
       <View style={styles.actionsRow}>
         <Text style={[styles.selectionCount, { color: colors.secondaryText }]}>
-          {selectedIds.size} / {allImages.length} 選択中
+          {selectedCount} / {allImages.length} 選択中
         </Text>
         <View style={styles.actionButtons}>
           <TouchableOpacity
@@ -336,9 +369,12 @@ export function ImageSelectionScreen() {
         renderItem={renderRow}
         ListHeaderComponent={
           collectionKind === 'network' ? (
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
-              {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
-            </Text>
+            <View>
+              <ContentsFilterPanel value={networkFilter} onChange={onFilterChange} />
+              <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
+              </Text>
+            </View>
           ) : null
         }
         // A handful of screens' worth up front so the initial view (and a
@@ -368,10 +404,10 @@ export function ImageSelectionScreen() {
           style={[
             styles.downloadButton,
             { backgroundColor: colors.primary },
-            selectedIds.size === 0 && styles.downloadButtonDisabled,
+            selectedCount === 0 && styles.downloadButtonDisabled,
           ]}
           onPress={handleDownload}
-          disabled={selectedIds.size === 0}
+          disabled={selectedCount === 0}
         >
           <Text style={styles.downloadButtonText}>選択した画像をダウンロード</Text>
         </TouchableOpacity>
