@@ -153,8 +153,12 @@ export const NETWORK_IMAGE_SCRIPT = `
   function now() { return epoch + performance.now(); }
   function emit(requestId) {
     if (timer) { clearTimeout(timer); timer = null; }
+    // Read at snapshot time so client-side page turns can update the title.
+    // The DOM has already decoded HTML entities in the content attribute.
+    var titleMeta = document.querySelector('meta[property="og:title"]');
+    var downloadTitle = titleMeta && (titleMeta.getAttribute('content') || '').trim();
     window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: document.title,
+      type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: downloadTitle || document.title,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
       , excluded: Array.from(excluded)
     }));

@@ -48,6 +48,7 @@ function harness(entries: object[] = []) {
       images: [],
       baseURI: page,
       title: 'Book',
+      querySelector: jest.fn(),
       addEventListener: (name: string, cb: (event: unknown) => void) => {
         callbacks[name] = cb;
       },
@@ -166,6 +167,28 @@ it('merges page turns, de-duplicates whole URLs, and isolates tabs and sites', (
 it('validates messages before accepting bridge data', () => {
   expect(parseNetworkImageMessage('not json')).toBeNull();
   expect(parseNetworkImageMessage('{"type":"NETWORK_IMAGES","images":[]}')).toBeNull();
+});
+
+it('uses the Open Graph title for network download naming', () => {
+  const h = harness();
+  h.context.document.querySelector.mockReturnValue({ getAttribute: () => ' HOGEHOGE & Book ' });
+  expect(h.snapshot().pageTitle).toBe('HOGEHOGE & Book');
+  expect(h.context.document.querySelector).toHaveBeenCalledWith('meta[property="og:title"]');
+});
+
+it('falls back to the document title when the meta title is absent or blank', () => {
+  const h = harness();
+  expect(h.snapshot().pageTitle).toBe('Book');
+  h.context.document.querySelector.mockReturnValue({ getAttribute: () => '  ' });
+  expect(h.snapshot().pageTitle).toBe('Book');
+});
+
+it('reads the updated meta title after an in-page navigation', () => {
+  const h = harness();
+  h.context.document.querySelector.mockReturnValue({ getAttribute: () => 'Chapter 1' });
+  expect(h.snapshot().pageTitle).toBe('Chapter 1');
+  h.context.document.querySelector.mockReturnValue({ getAttribute: () => 'Chapter 2' });
+  expect(h.snapshot().pageTitle).toBe('Chapter 2');
 });
 
 it('reads a cloned fetch JSON response without consuming the original body', async () => {
