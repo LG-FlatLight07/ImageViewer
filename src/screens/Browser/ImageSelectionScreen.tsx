@@ -25,6 +25,7 @@ import { removePreview, verifyNetworkImage } from '../../services/verifyNetworkI
 import { matchesContentsFilter } from '../../services/contentsFilter';
 import { useContentsFilterStore } from '../../store/contentsFilterStore';
 import { ContentsFilterPanel } from '../../components/ContentsFilterPanel';
+import { sourceTitleErrorMessage } from '../../services/networkImages';
 
 const DOWNLOAD_FAILURE_MESSAGE = 'ダウンロードに失敗しました';
 const DOWNLOAD_LIMIT_MESSAGE =
@@ -372,8 +373,11 @@ function ImageSelectionContent({
             <View>
               <ContentsFilterPanel value={networkFilter} onChange={onFilterChange} />
               {route.params.titleFromSource === false && (
-                <Text style={{ color: colors.secondaryText }}>
+                <Text selectable style={{ color: colors.secondaryText }}>
                   元HTMLの作品名を取得できなかったため、表示中ページのタイトルを使用しています。
+                  {'\n'}
+                  {sourceTitleErrorMessage(route.params.titleSourceError)}
+                  {'\n'}理由: {route.params.titleSourceError ?? 'UNKNOWN'}
                 </Text>
               )}
               <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>

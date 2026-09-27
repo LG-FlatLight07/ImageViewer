@@ -26,6 +26,7 @@ import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmar
 import { useAppTheme } from '../../theme/theme';
 import {
   MAX_NETWORK_IMAGES,
+  SOURCE_TITLE_TIMEOUT_MS,
   NETWORK_IMAGE_SCRIPT,
   NetworkImageCollection,
   networkImageSnapshotScript,
@@ -91,7 +92,7 @@ export function BrowserScreen() {
         '通信画像の確認',
         'ページから応答がありません。読み込み完了後にもう一度お試しください。',
       );
-    }, 5000);
+    }, SOURCE_TITLE_TIMEOUT_MS + 5000);
     pendingNetworkScan.current = { id, tabId: activeTabId, timer };
     webViewRef.current.injectJavaScript(networkImageSnapshotScript(id));
   };
@@ -340,6 +341,7 @@ export function BrowserScreen() {
           otherImages: [],
           collectionKind: 'network',
           titleFromSource: networkMessage.titleFromSource,
+          titleSourceError: networkMessage.titleSourceError,
         });
       }
       return;

@@ -255,6 +255,41 @@ it('falls back when source lookup fails rather than blocking image selection', a
   const result = await h.snapshotSource();
   expect(result?.pageTitle).toBe('Stale DOM title');
   expect(result?.titleFromSource).toBe(false);
+  expect(result?.titleSourceError).toBe('NETWORK_ERROR');
+});
+
+it.each([
+  ['HTTP_403', false, 403, 'text/html', '0', ''],
+  ['NOT_HTML', true, 200, 'application/json', '0', '{}'],
+  ['NOT_FOUND', true, 200, 'text/html', '0', '<meta property="og:title" content=" ">'],
+  ['TOO_LARGE', true, 200, 'text/html', '9000000', ''],
+])(
+  'reports source failure %s without losing the fallback title',
+  async (code, ok, status, mime, length, html) => {
+    const h = sourceHarness();
+    h.fetch.mockResolvedValue({
+      ok,
+      status,
+      url: page,
+      headers: { get: (name: string) => (name === 'content-type' ? mime : length) },
+      text: async () => html,
+    });
+    const result = await h.snapshotSource();
+    expect(result?.pageTitle).toBe('Stale DOM title');
+    expect(result?.titleFromSource).toBe(false);
+    expect(result?.titleSourceError).toBe(code);
+  },
+);
+
+it('reports a stalled source request as a timeout', async () => {
+  const h = sourceHarness();
+  h.fetch.mockReturnValue(new Promise(() => {}));
+  h.run(
+    'setTimeout = function (fn, ms) { if (ms === 10000) Promise.resolve().then(fn); return 1; };',
+  );
+  const result = await h.snapshotSource();
+  expect(result?.titleSourceError).toBe('TIMEOUT');
+  expect(result?.titleFromSource).toBe(false);
 });
 
 it('does not use the title of a redirected login page', async () => {
@@ -265,7 +300,9 @@ it('does not use the title of a redirected login page', async () => {
     headers: { get: () => 'text/html' },
     text: async () => 'Login',
   });
-  expect((await h.snapshotSource())?.pageTitle).toBe('Stale DOM title');
+  const result = await h.snapshotSource();
+  expect(result?.pageTitle).toBe('Stale DOM title');
+  expect(result?.titleSourceError).toBe('REDIRECT');
   expect(h.parse).not.toHaveBeenCalled();
 });
 

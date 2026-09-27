@@ -2,6 +2,22 @@ import type { DetectedImage } from './imageGrouping';
 import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
 
 export const MAX_NETWORK_IMAGES = 5000;
+export const SOURCE_TITLE_TIMEOUT_MS = 10000;
+
+export function sourceTitleErrorMessage(code?: string): string {
+  if (code?.match(/^HTTP_\d{3}$/))
+    return `元HTMLの取得が HTTP ${code.slice(5)} で拒否・失敗しました。`;
+  const reasons: Record<string, string> = {
+    TIMEOUT: '元HTMLの取得が10秒以内に完了しませんでした。',
+    REDIRECT: '別のURLへ転送されたため、そのページのタイトルは使用していません。',
+    TOO_LARGE: '元HTMLが取得上限の8MBを超えています。',
+    NOT_HTML: 'サーバーからHTML以外の応答が返されました。',
+    NOT_FOUND: 'HTMLは取得できましたが、空でない og:title が見つかりませんでした。',
+    NETWORK_ERROR: 'ページ内からのHTML取得に失敗しました（通信・ブラウザー制限など）。',
+    UNSUPPORTED: 'このページではHTML取得に必要なブラウザー機能を利用できません。',
+  };
+  return reasons[code ?? ''] ?? '取得理由を確認できませんでした。';
+}
 
 /** Never rebuild searchParams: signed query strings must remain byte-for-byte intact. */
 export function contentImageUrl(raw: string, base: string): string | null {
@@ -30,6 +46,7 @@ export type NetworkImageMessage = {
   pageUrl: string;
   pageTitle: string;
   titleFromSource?: boolean;
+  titleSourceError?: string;
   images: NetworkImageRecord[];
   excluded?: string[];
   requestId?: string;
@@ -64,6 +81,13 @@ export function parseNetworkImageMessage(data: string): NetworkImageMessage | nu
       pageTitle: message.pageTitle,
       titleFromSource:
         typeof message.titleFromSource === 'boolean' ? message.titleFromSource : undefined,
+      titleSourceError:
+        typeof message.titleSourceError === 'string' &&
+        /^(HTTP_\d{3}|TIMEOUT|REDIRECT|TOO_LARGE|NOT_HTML|NOT_FOUND|NETWORK_ERROR|UNSUPPORTED)$/.test(
+          message.titleSourceError,
+        )
+          ? message.titleSourceError
+          : undefined,
       images,
       excluded: Array.isArray(message.excluded)
         ? message.excluded
@@ -157,7 +181,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   var maxBody = 2 * 1024 * 1024;
   var sourceTitleFromHtml = ${SOURCE_TITLE_FUNCTION};
   function now() { return epoch + performance.now(); }
-  function emit(requestId, sourceTitle) {
+  function emit(requestId, sourceTitle, sourceError) {
     if (timer) { clearTimeout(timer); timer = null; }
     // Read at snapshot time so client-side page turns can update the title.
     // The DOM has already decoded HTML entities in the content attribute.
@@ -166,6 +190,7 @@ export const NETWORK_IMAGE_SCRIPT = `
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
       titleFromSource: requestId ? !!sourceTitle : undefined,
+      titleSourceError: sourceTitle ? undefined : sourceError,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
       , excluded: Array.from(excluded)
     }));
@@ -295,38 +320,47 @@ export const NETWORK_IMAGE_SCRIPT = `
   async function snapshotWithSource(id) {
     var pageUrl = location.href;
     var sourceTitle = '';
+    var sourceError = '';
+    var sourceBodyLimit = 8 * 1024 * 1024;
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timeout;
     try {
       // Read the current page's server HTML (Ctrl+U), not potentially stale SPA metadata.
       // Use the original fetch so this metadata lookup doesn't add image candidates.
       var lookup = (async function () {
-        if (!originalFetch || typeof DOMParser === 'undefined') return '';
+        if (!originalFetch || typeof DOMParser === 'undefined') { sourceError = 'UNSUPPORTED'; return ''; }
         var response = await originalFetch.call(window, pageUrl, {
           credentials: 'include', cache: 'no-cache',
           headers: { Accept: 'text/html' }, signal: controller ? controller.signal : undefined
         });
-        if (!response || !response.ok || !/html/i.test(response.headers.get('content-type') || '')) return '';
+        if (!response) { sourceError = 'NETWORK_ERROR'; return ''; }
+        if (!response.ok) { sourceError = 'HTTP_' + response.status; return ''; }
+        if (!/html/i.test(response.headers.get('content-type') || '')) { sourceError = 'NOT_HTML'; return ''; }
         // Do not name downloads after a redirected login/error page.
         var expected = new URL(pageUrl), actual = new URL(response.url || pageUrl);
         expected.hash = ''; actual.hash = '';
-        if (actual.href !== expected.href) return '';
-        if (Number(response.headers.get('content-length')) > maxBody) return '';
+        if (actual.href !== expected.href) { sourceError = 'REDIRECT'; return ''; }
+        if (Number(response.headers.get('content-length')) > sourceBodyLimit) { sourceError = 'TOO_LARGE'; return ''; }
         var html = await response.text();
-        if (html.length > maxBody) return '';
-        return sourceTitleFromHtml(html);
+        if (html.length > sourceBodyLimit) { sourceError = 'TOO_LARGE'; return ''; }
+        var foundTitle = sourceTitleFromHtml(html);
+        if (!foundTitle) sourceError = 'NOT_FOUND';
+        return foundTitle;
       })();
       sourceTitle = await Promise.race([lookup, new Promise(function (resolve) {
-        timeout = setTimeout(function () { if (controller) controller.abort(); resolve(''); }, 2500);
+        timeout = setTimeout(function () {
+          sourceError = 'TIMEOUT'; resolve(''); if (controller) controller.abort();
+        }, ${SOURCE_TITLE_TIMEOUT_MS});
       })]);
     } catch (_) {
+      if (!sourceError) sourceError = 'NETWORK_ERROR';
       // Offline, redirects and unsupported source requests keep the DOM/title fallback.
     } finally {
       if (timeout) clearTimeout(timeout);
     }
     // Never combine metadata from a previous page with a newly navigated document.
     if (location.href !== pageUrl) return;
-    scan(); emit(id, sourceTitle);
+    scan(); emit(id, sourceTitle, sourceError);
   }
   window.__myGalleryNetworkImages = {
     snapshot: function (id) { scan(); emit(id); },
