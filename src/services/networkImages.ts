@@ -123,7 +123,8 @@ export class NetworkImageCollection {
   }
 }
 
-// Runs in the main frame. It never sends extra requests or consumes the page's response body.
+// Runs in the main frame. Collection never consumes the page's response body.
+// An explicit save snapshot re-fetches the current HTML once to resolve its source title.
 // Resource Timing covers requests made before injection; fetch/XHR hooks provide MIME and JSON
 // response candidates afterward. Opaque responses, workers and cross-origin frames remain opaque.
 export const NETWORK_IMAGE_SCRIPT = `
@@ -151,14 +152,14 @@ export const NETWORK_IMAGE_SCRIPT = `
   var scanExistingImages = true;
   var maxBody = 2 * 1024 * 1024;
   function now() { return epoch + performance.now(); }
-  function emit(requestId) {
+  function emit(requestId, sourceTitle) {
     if (timer) { clearTimeout(timer); timer = null; }
     // Read at snapshot time so client-side page turns can update the title.
     // The DOM has already decoded HTML entities in the content attribute.
     var titleMeta = document.querySelector('meta[property="og:title"]');
     var downloadTitle = titleMeta && (titleMeta.getAttribute('content') || '').trim();
     window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: downloadTitle || document.title,
+      type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
       , excluded: Array.from(excluded)
     }));
@@ -285,8 +286,51 @@ export const NETWORK_IMAGE_SCRIPT = `
     }
   }, true);
   window.addEventListener('pagehide', function () { emit(); });
+  async function snapshotWithSource(id) {
+    var pageUrl = location.href;
+    var sourceTitle = '';
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeout;
+    try {
+      // Read the current page's server HTML (Ctrl+U), not potentially stale SPA metadata.
+      // Use the original fetch so this metadata lookup doesn't add image candidates.
+      var lookup = (async function () {
+        if (!originalFetch || typeof DOMParser === 'undefined') return '';
+        var response = await originalFetch.call(window, pageUrl, {
+          credentials: 'include', cache: 'no-cache',
+          headers: { Accept: 'text/html' }, signal: controller ? controller.signal : undefined
+        });
+        if (!response || !response.ok || !/html/i.test(response.headers.get('content-type') || '')) return '';
+        // Do not name downloads after a redirected login/error page.
+        var expected = new URL(pageUrl), actual = new URL(response.url || pageUrl);
+        expected.hash = ''; actual.hash = '';
+        if (actual.href !== expected.href) return '';
+        if (Number(response.headers.get('content-length')) > maxBody) return '';
+        var html = await response.text();
+        if (html.length > maxBody) return '';
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var metas = doc.querySelectorAll('meta[property="og:title"]');
+        for (var i = 0; i < metas.length; i++) {
+          var title = (metas[i].getAttribute('content') || '').trim();
+          if (title) return title;
+        }
+        return '';
+      })();
+      sourceTitle = await Promise.race([lookup, new Promise(function (resolve) {
+        timeout = setTimeout(function () { if (controller) controller.abort(); resolve(''); }, 2500);
+      })]);
+    } catch (_) {
+      // Offline, redirects and unsupported source requests keep the DOM/title fallback.
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+    // Never combine metadata from a previous page with a newly navigated document.
+    if (location.href !== pageUrl) return;
+    scan(); emit(id, sourceTitle);
+  }
   window.__myGalleryNetworkImages = {
     snapshot: function (id) { scan(); emit(id); },
+    snapshotWithSource: snapshotWithSource,
     clear: function () { records.clear(); dirty.clear(); cutoff = now(); scanExistingImages = false; emit(); }
   };
   scan();
@@ -296,5 +340,5 @@ true;
 `;
 
 export function networkImageSnapshotScript(requestId: string): string {
-  return `${NETWORK_IMAGE_SCRIPT}\nwindow.__myGalleryNetworkImages.snapshot(${JSON.stringify(requestId)}); true;`;
+  return `${NETWORK_IMAGE_SCRIPT}\nwindow.__myGalleryNetworkImages.snapshotWithSource(${JSON.stringify(requestId)}); true;`;
 }

@@ -71,7 +71,7 @@ function harness(entries: object[] = []) {
   const run = (script: string) => runInNewContext(script, sandbox);
   run(NETWORK_IMAGE_SCRIPT);
   const snapshot = () => {
-    run(networkImageSnapshotScript('test'));
+    run(`${NETWORK_IMAGE_SCRIPT}\nwindow.__myGalleryNetworkImages.snapshot('test');`);
     return parseNetworkImageMessage(messages[messages.length - 1])!;
   };
   return {
@@ -80,6 +80,8 @@ function harness(entries: object[] = []) {
     context,
     XHR,
     fetch,
+    messages,
+    sandbox,
     observe: (resources: object[]) => observer({ getEntries: () => resources }),
   };
 }
@@ -189,6 +191,75 @@ it('reads the updated meta title after an in-page navigation', () => {
   expect(h.snapshot().pageTitle).toBe('Chapter 1');
   h.context.document.querySelector.mockReturnValue({ getAttribute: () => 'Chapter 2' });
   expect(h.snapshot().pageTitle).toBe('Chapter 2');
+});
+
+function sourceHarness() {
+  const h = harness();
+  h.context.document.querySelector.mockReturnValue({ getAttribute: () => 'Stale DOM title' });
+  const parse = jest.fn(() => ({
+    querySelectorAll: () => [{ getAttribute: () => ' HOGEHOGE & Story ' }],
+  }));
+  Object.assign(h.sandbox, {
+    DOMParser: class {
+      parseFromString = parse;
+    },
+  });
+  h.fetch.mockResolvedValue({
+    ok: true,
+    url: page,
+    headers: {
+      get: (name: string) => (name === 'content-type' ? 'text/html; charset=utf-8' : null),
+    },
+    text: async () => '<meta property="og:title" content="HOGEHOGE &amp; Story">',
+  });
+  async function snapshotSource() {
+    h.run(networkImageSnapshotScript('source'));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    return h.messages
+      .map(parseNetworkImageMessage)
+      .find((message) => message?.requestId === 'source');
+  }
+  return { ...h, parse, snapshotSource };
+}
+
+it('prefers the current URL source metadata over stale SPA DOM metadata', async () => {
+  const h = sourceHarness();
+  expect((await h.snapshotSource())?.pageTitle).toBe('HOGEHOGE & Story');
+  expect(h.fetch).toHaveBeenCalledWith(
+    page,
+    expect.objectContaining({ credentials: 'include', cache: 'no-cache' }),
+  );
+  expect(h.parse).toHaveBeenCalledWith(
+    '<meta property="og:title" content="HOGEHOGE &amp; Story">',
+    'text/html',
+  );
+});
+
+it('falls back when source lookup fails rather than blocking image selection', async () => {
+  const h = sourceHarness();
+  h.fetch.mockRejectedValue(new Error('offline'));
+  expect((await h.snapshotSource())?.pageTitle).toBe('Stale DOM title');
+});
+
+it('does not use the title of a redirected login page', async () => {
+  const h = sourceHarness();
+  h.fetch.mockResolvedValue({
+    ok: true,
+    url: 'https://reader.example/login',
+    headers: { get: () => 'text/html' },
+    text: async () => 'Login',
+  });
+  expect((await h.snapshotSource())?.pageTitle).toBe('Stale DOM title');
+  expect(h.parse).not.toHaveBeenCalled();
+});
+
+it('discards a source result if the displayed page has changed meanwhile', async () => {
+  const h = sourceHarness();
+  h.fetch.mockImplementation(async () => {
+    h.context.location.href = 'https://reader.example/book/2';
+    return { ok: false };
+  });
+  expect(await h.snapshotSource()).toBeUndefined();
 });
 
 it('reads a cloned fetch JSON response without consuming the original body', async () => {
