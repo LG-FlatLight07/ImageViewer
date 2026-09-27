@@ -1,4 +1,5 @@
 import type { DetectedImage } from './imageGrouping';
+import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
 
 export const MAX_NETWORK_IMAGES = 5000;
 
@@ -28,6 +29,7 @@ export type NetworkImageMessage = {
   type: 'NETWORK_IMAGES';
   pageUrl: string;
   pageTitle: string;
+  titleFromSource?: boolean;
   images: NetworkImageRecord[];
   excluded?: string[];
   requestId?: string;
@@ -60,6 +62,8 @@ export function parseNetworkImageMessage(data: string): NetworkImageMessage | nu
       type: 'NETWORK_IMAGES',
       pageUrl: message.pageUrl,
       pageTitle: message.pageTitle,
+      titleFromSource:
+        typeof message.titleFromSource === 'boolean' ? message.titleFromSource : undefined,
       images,
       excluded: Array.isArray(message.excluded)
         ? message.excluded
@@ -151,6 +155,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   var cutoff = -1;
   var scanExistingImages = true;
   var maxBody = 2 * 1024 * 1024;
+  var sourceTitleFromHtml = ${SOURCE_TITLE_FUNCTION};
   function now() { return epoch + performance.now(); }
   function emit(requestId, sourceTitle) {
     if (timer) { clearTimeout(timer); timer = null; }
@@ -160,6 +165,7 @@ export const NETWORK_IMAGE_SCRIPT = `
     var downloadTitle = titleMeta && (titleMeta.getAttribute('content') || '').trim();
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
+      titleFromSource: requestId ? !!sourceTitle : undefined,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
       , excluded: Array.from(excluded)
     }));
@@ -308,13 +314,7 @@ export const NETWORK_IMAGE_SCRIPT = `
         if (Number(response.headers.get('content-length')) > maxBody) return '';
         var html = await response.text();
         if (html.length > maxBody) return '';
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        var metas = doc.querySelectorAll('meta[property="og:title"]');
-        for (var i = 0; i < metas.length; i++) {
-          var title = (metas[i].getAttribute('content') || '').trim();
-          if (title) return title;
-        }
-        return '';
+        return sourceTitleFromHtml(html);
       })();
       sourceTitle = await Promise.race([lookup, new Promise(function (resolve) {
         timeout = setTimeout(function () { if (controller) controller.abort(); resolve(''); }, 2500);

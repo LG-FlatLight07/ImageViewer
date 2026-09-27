@@ -371,6 +371,11 @@ function ImageSelectionContent({
           collectionKind === 'network' ? (
             <View>
               <ContentsFilterPanel value={networkFilter} onChange={onFilterChange} />
+              {route.params.titleFromSource === false && (
+                <Text style={{ color: colors.secondaryText }}>
+                  元HTMLの作品名を取得できなかったため、表示中ページのタイトルを使用しています。
+                </Text>
+              )}
               <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
                 {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
               </Text>

@@ -339,6 +339,7 @@ export function BrowserScreen() {
           primaryGroup: { groupKey: 'network-contents', images },
           otherImages: [],
           collectionKind: 'network',
+          titleFromSource: networkMessage.titleFromSource,
         });
       }
       return;

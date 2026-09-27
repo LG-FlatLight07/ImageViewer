@@ -8,6 +8,7 @@ export type RootStackParamList = {
     primaryGroup: DetectedImageGroup | null;
     otherImages: DetectedImage[];
     collectionKind?: 'network';
+    titleFromSource?: boolean;
   };
   FolderPicker: { movingFolderId: string };
   AppGuide: undefined;

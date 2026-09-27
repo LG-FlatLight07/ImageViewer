@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { runInNewContext } from 'vm';
 import { TextDecoder, TextEncoder } from 'util';
+import { JSDOM } from 'jsdom';
 import {
   contentImageUrl,
   NETWORK_IMAGE_SCRIPT,
@@ -196,9 +197,8 @@ it('reads the updated meta title after an in-page navigation', () => {
 function sourceHarness() {
   const h = harness();
   h.context.document.querySelector.mockReturnValue({ getAttribute: () => 'Stale DOM title' });
-  const parse = jest.fn(() => ({
-    querySelectorAll: () => [{ getAttribute: () => ' HOGEHOGE & Story ' }],
-  }));
+  const parser = new new JSDOM('').window.DOMParser();
+  const parse = jest.fn((html: string) => parser.parseFromString(html, 'text/html'));
   Object.assign(h.sandbox, {
     DOMParser: class {
       parseFromString = parse;
@@ -235,10 +235,26 @@ it('prefers the current URL source metadata over stale SPA DOM metadata', async 
   );
 });
 
+it('selects the exact metadata block following amplitude instead of an earlier site title', async () => {
+  const h = sourceHarness();
+  h.fetch.mockResolvedValue({
+    ok: true,
+    url: page,
+    headers: { get: () => 'text/html' },
+    text: async () =>
+      '<meta property="og:title" content="サイト名"><script>amplitude.getInstance().init("any-key");</script><meta name="twitter:card" content="summary" /><meta property="og:title" content="HOGEHOGE &amp; &#20316;&#21697;" /><script>window.site = true;</script>',
+  });
+  const result = await h.snapshotSource();
+  expect(result?.pageTitle).toBe('HOGEHOGE & 作品');
+  expect(result?.titleFromSource).toBe(true);
+});
+
 it('falls back when source lookup fails rather than blocking image selection', async () => {
   const h = sourceHarness();
   h.fetch.mockRejectedValue(new Error('offline'));
-  expect((await h.snapshotSource())?.pageTitle).toBe('Stale DOM title');
+  const result = await h.snapshotSource();
+  expect(result?.pageTitle).toBe('Stale DOM title');
+  expect(result?.titleFromSource).toBe(false);
 });
 
 it('does not use the title of a redirected login page', async () => {
