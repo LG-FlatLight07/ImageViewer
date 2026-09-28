@@ -6,6 +6,7 @@ import {
   contentImageUrl,
   NETWORK_IMAGE_SCRIPT,
   networkImageSnapshotScript,
+  networkImageSourceRetryScript,
   NetworkImageCollection,
   parseNetworkImageMessage,
 } from '../networkImages';
@@ -221,6 +222,24 @@ function sourceHarness() {
   }
   return { ...h, parse, snapshotSource };
 }
+
+it('uses native source HTML after page HTML has no metadata, without mixing later navigation', () => {
+  const h = sourceHarness();
+  const script = networkImageSourceRetryScript(
+    'native',
+    page,
+    '<script>amplitude.getInstance().init("key");</script><meta property="og:title" content="Native &amp; title">',
+  );
+  h.run(script);
+  const result = parseNetworkImageMessage(h.messages[h.messages.length - 1]);
+  expect(result?.pageTitle).toBe('Native & title');
+  expect(result?.titleFromSource).toBe(true);
+  expect(result?.titleSourceError).toBeUndefined();
+  const count = h.messages.length;
+  h.context.location.href = 'https://reader.example/book/2';
+  h.run(script);
+  expect(h.messages).toHaveLength(count);
+});
 
 it('prefers the current URL source metadata over stale SPA DOM metadata', async () => {
   const h = sourceHarness();

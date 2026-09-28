@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
@@ -24,12 +24,14 @@ import type { BrowserStackParamList } from '../../navigation/types';
 import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 import { useAppTheme } from '../../theme/theme';
+import { fetchNativePageSource } from '../../services/nativePageSource';
 import {
   MAX_NETWORK_IMAGES,
   SOURCE_TITLE_TIMEOUT_MS,
   NETWORK_IMAGE_SCRIPT,
   NetworkImageCollection,
   networkImageSnapshotScript,
+  networkImageSourceRetryScript,
   parseNetworkImageMessage,
 } from '../../services/networkImages';
 
@@ -69,6 +71,7 @@ export function BrowserScreen() {
   const pendingNetworkScan = useRef<{
     id: string;
     tabId: string;
+    sourceRetried?: boolean;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
 
@@ -86,13 +89,16 @@ export function BrowserScreen() {
   const handleSaveNetworkImages = () => {
     if (isTopPage || !webViewRef.current || pendingNetworkScan.current) return;
     const id = `${activeTabId}-${Date.now()}`;
-    const timer = setTimeout(() => {
-      pendingNetworkScan.current = null;
-      Alert.alert(
-        '通信画像の確認',
-        'ページから応答がありません。読み込み完了後にもう一度お試しください。',
-      );
-    }, SOURCE_TITLE_TIMEOUT_MS + 5000);
+    const timer = setTimeout(
+      () => {
+        pendingNetworkScan.current = null;
+        Alert.alert(
+          '通信画像の確認',
+          'ページから応答がありません。読み込み完了後にもう一度お試しください。',
+        );
+      },
+      SOURCE_TITLE_TIMEOUT_MS * 2 + 5000,
+    );
     pendingNetworkScan.current = { id, tabId: activeTabId, timer };
     webViewRef.current.injectJavaScript(networkImageSnapshotScript(id));
   };
@@ -319,6 +325,24 @@ export function BrowserScreen() {
       const images = networkImages.current.merge(activeTabId, networkMessage);
       const pending = pendingNetworkScan.current;
       if (pending && pending.tabId === activeTabId && pending.id === networkMessage.requestId) {
+        if (
+          Platform.OS !== 'web' &&
+          networkMessage.titleSourceError === 'NOT_FOUND' &&
+          !pending.sourceRetried
+        ) {
+          pending.sourceRetried = true;
+          void fetchNativePageSource(networkMessage.pageUrl).then(({ html, error }) => {
+            if (
+              pendingNetworkScan.current !== pending ||
+              useBrowserStore.getState().activeTabId !== pending.tabId
+            )
+              return;
+            webViewRef.current?.injectJavaScript(
+              networkImageSourceRetryScript(pending.id, networkMessage.pageUrl, html, error),
+            );
+          });
+          return;
+        }
         clearTimeout(pending.timer);
         pendingNetworkScan.current = null;
         if (!images.length) {

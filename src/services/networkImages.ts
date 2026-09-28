@@ -365,6 +365,11 @@ export const NETWORK_IMAGE_SCRIPT = `
   window.__myGalleryNetworkImages = {
     snapshot: function (id) { scan(); emit(id); },
     snapshotWithSource: snapshotWithSource,
+    snapshotFromHtml: function (id, pageUrl, html, error) {
+      if (location.href !== pageUrl) return;
+      var title = sourceTitleFromHtml(html);
+      scan(); emit(id, title, title ? undefined : (error || 'NOT_FOUND'));
+    },
     clear: function () { records.clear(); dirty.clear(); cutoff = now(); scanExistingImages = false; emit(); }
   };
   scan();
@@ -375,4 +380,13 @@ true;
 
 export function networkImageSnapshotScript(requestId: string): string {
   return `${NETWORK_IMAGE_SCRIPT}\nwindow.__myGalleryNetworkImages.snapshotWithSource(${JSON.stringify(requestId)}); true;`;
+}
+
+export function networkImageSourceRetryScript(
+  requestId: string,
+  pageUrl: string,
+  html: string,
+  error?: string,
+): string {
+  return `window.__myGalleryNetworkImages.snapshotFromHtml(${JSON.stringify(requestId)}, ${JSON.stringify(pageUrl)}, ${JSON.stringify(html)}, ${JSON.stringify(error ?? '')}); true;`;
 }
