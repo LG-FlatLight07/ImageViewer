@@ -127,6 +127,56 @@ it('collects response URLs in array order while excluding labelled thumbnails', 
   expect(h.snapshot().images.map((image) => image.src)).toEqual([first, second]);
 });
 
+it('recovers image fetch/XHR requests which preceded injection without exposed MIME', () => {
+  const high = 'https://cdn.example/contents/page.webp?exp=123&sig=a%2Fb';
+  const h = harness([
+    { name: high, initiatorType: 'fetch', startTime: 1 },
+    {
+      name: 'https://cdn.example/contents/page2.jpg',
+      initiatorType: 'xmlhttprequest',
+      startTime: 2,
+    },
+    { name: 'https://cdn.example/attributes/icon.png', initiatorType: 'fetch', startTime: 3 },
+    {
+      name: 'https://cdn.example/contents/error.jpg',
+      contentType: 'text/html',
+      initiatorType: 'fetch',
+      startTime: 4,
+    },
+  ]);
+  expect(h.snapshot().images.map((i) => i.src)).toEqual([
+    high,
+    'https://cdn.example/contents/page2.jpg',
+  ]);
+});
+
+it('collects binary image fetches without consuming the response body', async () => {
+  const h = harness();
+  const src = 'https://cdn.example/contents/page.jpg?sig=unchanged%2F';
+  const response = {
+    ok: true,
+    url: src,
+    headers: { get: () => 'application/octet-stream' },
+    clone: jest.fn(),
+  };
+  h.fetch.mockResolvedValue(response);
+  expect(await h.context.fetch(src)).toBe(response);
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  expect(h.snapshot().images.map((i) => i.src)).toEqual([src]);
+  expect(response.clone).not.toHaveBeenCalled();
+});
+
+it('collects blob XHR image URLs with generic binary MIME', () => {
+  const h = harness();
+  const xhr = new h.XHR();
+  xhr.responseURL = 'https://cdn.example/contents/page.png?sig=exact';
+  xhr.responseType = 'blob';
+  xhr.mime = 'application/octet-stream';
+  xhr.send();
+  xhr.callbacks.loadend();
+  expect(h.snapshot().images.map((i) => i.src)).toEqual([xhr.responseURL]);
+});
+
 it('does not wrap fetch twice and returns the original page response unchanged', async () => {
   const h = harness();
   const response = { ok: true, url: first, headers: { get: () => 'image/webp' }, clone: jest.fn() };

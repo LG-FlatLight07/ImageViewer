@@ -211,12 +211,18 @@ export const NETWORK_IMAGE_SCRIPT = `
   function resource(entry) {
     var mime = entry.contentType || '';
     var type = entry.initiatorType;
-    // An image initiator or MIME is authoritative; CSS backgrounds on older engines
-    // lack MIME, so accept known image extensions only for CSS entries.
+    // Buffered cross-origin fetch/XHR entries often lack contentType. They may
+    // also predate our hooks. Keep observed image-file URLs as candidates;
+    // native verification still rejects non-images, blank images and errors.
     if (type === 'img' || /^image\\//i.test(mime) ||
-        (type === 'css' && /\\.(?:avif|webp|png|jpe?g|gif|svg)(?:[?#]|$)/i.test(entry.name))) {
+        ((type === 'css' || type === 'fetch' || type === 'xmlhttprequest') && imageFileCandidate(entry.name, mime))) {
       add(entry.name, document.baseURI, 'image', epoch + entry.startTime);
     }
+  }
+  function imageFileCandidate(url, mime) {
+    // Do not reclassify explicit HTML/JSON failures as image responses.
+    return (!mime || /^(?:application\\/octet-stream|binary\\/octet-stream)(?:;|$)/i.test(mime)) &&
+      /\\.(?:avif|webp|png|jpe?g|gif|svg)(?:[?#]|$)/i.test(url);
   }
   function scan() {
     Array.prototype.forEach.call(document.images, inspectImage);
@@ -259,7 +265,9 @@ export const NETWORK_IMAGE_SCRIPT = `
   async function inspectResponse(response, at) {
     if (!response || !response.ok) return;
     var mime = response.headers.get('content-type') || '';
-    if (/^image\\//i.test(mime)) { add(response.url, document.baseURI, 'image', at); return; }
+    if (/^image\\//i.test(mime) || imageFileCandidate(response.url, mime)) {
+      add(response.url, document.baseURI, 'image', at); return;
+    }
     if (!/json|text\\/|xml/i.test(mime) || Number(response.headers.get('content-length')) > maxBody) return;
     var clone = response.clone();
     if (!clone.body || !clone.body.getReader || typeof TextDecoder === 'undefined') return;
@@ -294,7 +302,7 @@ export const NETWORK_IMAGE_SCRIPT = `
         try {
           if (xhr.status < 200 || xhr.status >= 300) return;
           var mime = xhr.getResponseHeader('content-type') || '';
-          if (/^image\\//i.test(mime)) add(xhr.responseURL, document.baseURI, 'image', at);
+          if (/^image\\//i.test(mime) || imageFileCandidate(xhr.responseURL, mime)) add(xhr.responseURL, document.baseURI, 'image', at);
           else if (/json|text\\/|xml/i.test(mime)) {
             if (xhr.responseType === 'json') responseBody(JSON.stringify(xhr.response), xhr.responseURL, at);
             else if (!xhr.responseType || xhr.responseType === 'text') responseBody(xhr.responseText, xhr.responseURL, at);
