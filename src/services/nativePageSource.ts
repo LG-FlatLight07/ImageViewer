@@ -1,3 +1,17 @@
+/** Komiflo's hashbang reader route has a matching public source-HTML path. */
+export function sourceHtmlUrl(pageUrl: string): string {
+  const url = new URL(pageUrl);
+  if (
+    url.origin === 'https://komiflo.com' &&
+    url.pathname === '/' &&
+    /^#!\/comics\/\d+\/read\/page\/\d+\/?$/.test(url.hash)
+  ) {
+    url.pathname = url.hash.slice(2);
+    url.hash = '';
+  }
+  return url.href;
+}
+
 /** Fetch outside the page context, so page fetch hooks and Service Workers cannot replace HTML. */
 export async function fetchNativePageSource(
   url: string,
@@ -5,15 +19,16 @@ export async function fetchNativePageSource(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const expected = new URL(url);
+    const requestUrl = sourceHtmlUrl(url);
+    const expected = new URL(requestUrl);
     if (!/^https?:$/.test(expected.protocol)) return { html: '', error: 'UNSUPPORTED' };
-    const response = await fetch(url, {
+    const response = await fetch(requestUrl, {
       headers: { Accept: 'text/html', 'Cache-Control': 'no-cache' },
       signal: controller.signal,
       credentials: 'omit',
     });
     if (!response.ok) return { html: '', error: `HTTP_${response.status}` };
-    const actual = new URL(response.url || url);
+    const actual = new URL(response.url || requestUrl);
     expected.hash = '';
     actual.hash = '';
     if (actual.href !== expected.href) return { html: '', error: 'REDIRECT' };
