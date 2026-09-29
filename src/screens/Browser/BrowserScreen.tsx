@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView, { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -65,6 +65,16 @@ export function BrowserScreen() {
 
   const [bookmarked, setBookmarked] = useState(false);
   const [chromeHeight, setChromeHeight] = useState(0);
+  const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const isTopPage = url === TOP_PAGE_URL;
   const topPageHtml = useMemo(() => buildTopPageHtml(searchEngine), [searchEngine]);
   const networkImages = useRef(new NetworkImageCollection());
@@ -437,56 +447,63 @@ export function BrowserScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
-      <DraggableLayoutArea>
-        <WebView
-          key={activeTabId}
-          ref={webViewRef}
-          source={isTopPage ? { html: topPageHtml } : { uri: url }}
-          style={[
-            styles.webview,
-            chromeAtBottom
-              ? { marginBottom: BAR_MARGIN + chromeHeight + CHROME_GAP }
-              : { marginTop: BAR_MARGIN + chromeHeight + CHROME_GAP },
-          ]}
-          onNavigationStateChange={handleNavigationStateChange}
-          onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => {
-            setLoading(false);
-            webViewRef.current?.injectJavaScript(NETWORK_IMAGE_SCRIPT);
-          }}
-          onMessage={handleMessage}
-          onShouldStartLoadWithRequest={handleShouldStartLoad}
-          startInLoadingState
-          incognito={disableHistory}
-          injectedJavaScriptBeforeContentLoaded={`${NETWORK_IMAGE_SCRIPT}\n${adBlockEnabled ? AD_BLOCK_SCRIPT : ''}`}
-          injectedJavaScript={NETWORK_IMAGE_SCRIPT}
-          setSupportMultipleWindows={!adBlockEnabled}
-          onOpenWindow={adBlockEnabled ? () => {} : undefined}
-        />
-        {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.top}
+      >
+        <DraggableLayoutArea>
+          <WebView
+            key={activeTabId}
+            ref={webViewRef}
+            source={isTopPage ? { html: topPageHtml } : { uri: url }}
+            style={[
+              styles.webview,
+              chromeAtBottom
+                ? { marginBottom: BAR_MARGIN + chromeHeight + CHROME_GAP }
+                : { marginTop: BAR_MARGIN + chromeHeight + CHROME_GAP },
+            ]}
+            onNavigationStateChange={handleNavigationStateChange}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => {
+              setLoading(false);
+              webViewRef.current?.injectJavaScript(NETWORK_IMAGE_SCRIPT);
+            }}
+            onMessage={handleMessage}
+            onShouldStartLoadWithRequest={handleShouldStartLoad}
+            startInLoadingState
+            incognito={disableHistory}
+            injectedJavaScriptBeforeContentLoaded={`${NETWORK_IMAGE_SCRIPT}\n${adBlockEnabled ? AD_BLOCK_SCRIPT : ''}`}
+            injectedJavaScript={NETWORK_IMAGE_SCRIPT}
+            setSupportMultipleWindows={!adBlockEnabled}
+            onOpenWindow={adBlockEnabled ? () => {} : undefined}
+          />
+          {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
-        <ControlGroup
-          screenId={CHROME_SCREEN_ID}
-          variant="bar"
-          defaultAnchor="top"
-          edgesOnly
-          onMeasured={(size) => setChromeHeight(size.height)}
-        >
-          {chromeAtBottom ? (
-            <>
-              {tabBarElement}
-              <View style={styles.chromeGap} />
-              {urlBarElement}
-            </>
-          ) : (
-            <>
-              {urlBarElement}
-              <View style={styles.chromeGap} />
-              {tabBarElement}
-            </>
-          )}
-        </ControlGroup>
-      </DraggableLayoutArea>
+          <ControlGroup
+            screenId={CHROME_SCREEN_ID}
+            variant="bar"
+            defaultAnchor="top"
+            edgesOnly
+            flushBottom={chromeAtBottom && keyboardVisible}
+            onMeasured={(size) => setChromeHeight(size.height)}
+          >
+            {chromeAtBottom ? (
+              <>
+                {tabBarElement}
+                <View style={styles.chromeGap} />
+                {urlBarElement}
+              </>
+            ) : (
+              <>
+                {urlBarElement}
+                <View style={styles.chromeGap} />
+                {tabBarElement}
+              </>
+            )}
+          </ControlGroup>
+        </DraggableLayoutArea>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

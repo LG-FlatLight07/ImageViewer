@@ -35,6 +35,7 @@ function MainTabs() {
         component={BrowserNavigator}
         options={{
           title: 'ブラウザー',
+          tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="globe-outline" size={size} color={color} />
           ),

@@ -3,7 +3,6 @@ import {
   Alert,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 
+import { TagGroupPicker } from './TagGroupPicker';
 import { listAllTagNames } from '../db/foldersRepository';
 import { canCreateNewTag, FREE_TAG_LIMIT, useMonetizationStore } from '../store/monetizationStore';
 import { useAppTheme } from '../theme/theme';
@@ -123,29 +123,14 @@ export function TagEditorModal({
             returnKeyType="done"
           />
 
-          {suggestions.length > 0 && (
+          {
             <View style={styles.suggestionsBlock}>
               <Text style={[styles.suggestionsLabel, { color: colors.secondaryText }]}>
                 既存のタグから選択
               </Text>
-              <ScrollView style={styles.suggestionsScroll} keyboardShouldPersistTaps="handled">
-                <View style={styles.suggestionsRow}>
-                  {suggestions.map((name) => (
-                    <TouchableOpacity
-                      key={name}
-                      style={[styles.suggestionChip, { backgroundColor: colors.surface }]}
-                      onPress={() => addTag(name)}
-                    >
-                      <Ionicons name="add" size={14} color={colors.secondaryText} />
-                      <Text style={[styles.suggestionChipText, { color: colors.text }]}>
-                        {name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
+              <TagGroupPicker tags={suggestions} allTags={existingTags} onSelect={addTag} />
             </View>
-          )}
+          }
 
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={onCancel}>

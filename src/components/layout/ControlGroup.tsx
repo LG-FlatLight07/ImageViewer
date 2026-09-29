@@ -57,6 +57,7 @@ type ControlGroupProps = {
   stackPeerId?: string;
   /** Fires whenever this group's rendered size changes (e.g. so a screen can reserve scroll-content space for it). */
   onMeasured?: (size: Size) => void;
+  flushBottom?: boolean;
 };
 
 export function ControlGroup({
@@ -67,6 +68,7 @@ export function ControlGroup({
   edgesOnly = false,
   stackPeerId,
   onMeasured,
+  flushBottom = false,
 }: ControlGroupProps) {
   const { colors } = useAppTheme();
   const editMode = useLayoutStore((state) => state.editMode);
@@ -96,6 +98,10 @@ export function ControlGroup({
   const anchor = edgesOnly ? clampToEdgeAnchor(rawAnchor) : rawAnchor;
 
   const origin = getAnchorOrigin(anchor, bounds, effectiveSize, EDGE_MARGIN);
+  if (flushBottom && anchor === EDGE_BOTTOM_ANCHOR) {
+    // The inner bar padding is 6px; align the actual URL control with the keyboard.
+    origin.y = Math.max(0, bounds.height - effectiveSize.height + 6);
+  }
 
   // If a stacking peer is configured and both of us resolve to the same
   // edge, the less-recently-moved group (older/undefined movedAt) stacks

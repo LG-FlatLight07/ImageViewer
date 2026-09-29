@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -38,6 +30,7 @@ import { FolderRow } from '../../components/FolderRow';
 import { SwipeRowCoordinatorProvider } from '../../components/SwipeRowCoordinator';
 import { ActionMenuModal } from '../../components/ActionMenuModal';
 import { PromptModal } from '../../components/PromptModal';
+import { TagGroupPicker } from '../../components/TagGroupPicker';
 import { TagEditorModal } from '../../components/TagEditorModal';
 import { DraggableLayoutArea } from '../../components/layout/DraggableLayoutArea';
 import { ControlGroup } from '../../components/layout/ControlGroup';
@@ -131,8 +124,7 @@ export function FolderListScreen() {
 
   const tagSuggestions = allTagNames
     .filter((name) => !selectedTags.includes(name))
-    .filter((name) => name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-    .slice(0, 20);
+    .filter((name) => name.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
   const addTagFilter = (name: string) => {
     setSelectedTags((prev) => (prev.includes(name) ? prev : [...prev, name]));
@@ -270,7 +262,7 @@ export function FolderListScreen() {
             </View>
           )}
 
-          {tagSuggestions.length > 0 && (
+          {
             <View style={[styles.tagSuggestionArea, { backgroundColor: colors.surface }]}>
               <View style={styles.tagSuggestionHeader}>
                 <Text style={[styles.tagSuggestionHeaderText, { color: colors.secondaryText }]}>
@@ -288,24 +280,9 @@ export function FolderListScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <ScrollView
-                style={styles.tagSuggestionScroll}
-                contentContainerStyle={styles.tagSuggestionRow}
-                nestedScrollEnabled
-              >
-                {tagSuggestions.map((name) => (
-                  <TouchableOpacity
-                    key={name}
-                    style={[styles.tagSuggestionChip, { backgroundColor: colors.background }]}
-                    onPress={() => addTagFilter(name)}
-                  >
-                    <Ionicons name="pricetag-outline" size={11} color={colors.secondaryText} />
-                    <Text style={[styles.tagSuggestionText, { color: colors.text }]}>{name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <TagGroupPicker tags={tagSuggestions} allTags={allTagNames} onSelect={addTagFilter} />
             </View>
-          )}
+          }
         </ControlGroup>
       </DraggableLayoutArea>
 
