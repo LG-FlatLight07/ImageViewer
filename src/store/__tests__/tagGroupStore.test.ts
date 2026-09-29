@@ -19,7 +19,7 @@ it('creates named categories and moves tags between them without losing other ta
   ]);
   expect(store.save(null, '作者', [])).toBeNull();
   expect(store.save(null, ' ', [])).toBeNull();
-  expect(store.save(null, '未分類', [])).toBeNull();
+  expect(store.save(null, 'すべて', [])).toBeNull();
 });
 it('restores groups and membership after restarting', async () => {
   useTagGroupStore.getState().save(null, '作者', ['A']);

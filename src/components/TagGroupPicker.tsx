@@ -29,11 +29,6 @@ export function TagGroupPicker({ tags, allTags, onSelect }: Props) {
   );
   const pages: TagGroup[] = [
     { id: 'all', name: 'すべて', tags },
-    {
-      id: 'ungrouped',
-      name: '未分類',
-      tags: tags.filter((t) => !groups.some((g) => g.tags.includes(t))),
-    },
     ...groups.map((g) => ({ ...g, tags: tags.filter((t) => g.tags.includes(t)) })),
   ];
   const index = Math.max(
@@ -122,11 +117,6 @@ export function TagGroupPicker({ tags, allTags, onSelect }: Props) {
           </View>
         ))}
       </ScrollView>
-      {groups.some((g) => g.id === active) && (
-        <TouchableOpacity onPress={() => openEditor(groups.find((g) => g.id === active))}>
-          <Text style={{ color: colors.primary, padding: 4 }}>グループ名・所属タグを編集</Text>
-        </TouchableOpacity>
-      )}
       <Modal
         visible={editor !== null}
         transparent
@@ -189,11 +179,11 @@ export function TagGroupPicker({ tags, allTags, onSelect }: Props) {
                   style={styles.action}
                   onPress={() => {
                     remove(editor.id!);
-                    setActive('ungrouped');
+                    setActive('all');
                     setEditor(null);
                   }}
                 >
-                  <Text style={{ color: colors.secondaryText }}>グループ解除</Text>
+                  <Text style={{ color: colors.secondaryText }}>グループを削除</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.action} onPress={() => setEditor(null)}>
@@ -207,7 +197,7 @@ export function TagGroupPicker({ tags, allTags, onSelect }: Props) {
                   if (!id) {
                     Alert.alert(
                       'グループ名を確認してください',
-                      '空欄・同名・「すべて」「未分類」は使用できません。',
+                      '空欄・同名・「すべて」は使用できません。',
                     );
                     return;
                   }

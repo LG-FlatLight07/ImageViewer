@@ -48,7 +48,11 @@ export async function verifyNetworkImage(src: string, sourceUrl: string, signal:
     if (width <= 16 || height <= 16) return null;
     image.release();
     image = undefined;
-    context.resize({ width: 192, height: 192 });
+    // Selection preview only: keep the page aspect ratio and never upscale.
+    // The download flow still saves candidate.src, not this JPEG cache.
+    context.resize(
+      width >= height ? { width: Math.min(width, 512) } : { height: Math.min(height, 512) },
+    );
     image = await context.renderAsync();
     const result = await image.saveAsync({ format: SaveFormat.JPEG, compress: 1 });
     preview = result.uri;

@@ -3,6 +3,7 @@ import { verifyNetworkImage } from '../verifyNetworkImage';
 const mockDelete = jest.fn();
 const mockDownload = jest.fn();
 const mockRender = jest.fn();
+const mockResize = jest.fn();
 const mockDecode = jest.fn();
 const mockCancel = jest.fn().mockResolvedValue(undefined);
 jest.mock('expo-file-system', () => ({
@@ -34,7 +35,7 @@ jest.mock('expo-image-manipulator', () => ({
   ImageManipulator: {
     manipulate: () => ({
       renderAsync: mockRender,
-      resize: jest.fn(),
+      resize: mockResize,
       release: jest.fn(),
     }),
   },
@@ -60,9 +61,26 @@ it('keeps content, preserves the URL, and cleans the original temporary file', a
     new AbortController().signal,
   );
   expect(result?.previewUri).toBe('file:///cache/preview.jpg');
+  expect(result).toMatchObject({ width: 800, height: 1200 });
+  expect(mockResize).toHaveBeenCalledWith({ height: 512 });
   expect(mockDownload.mock.calls[0][0]).toBe(src);
   expect(mockDelete).toHaveBeenCalledWith('file:///cache/network-check-test');
   expect(mockDelete).not.toHaveBeenCalledWith('file:///cache/preview.jpg');
+});
+
+it('does not enlarge a small landscape preview or force it into a square', async () => {
+  mockRender.mockResolvedValue({
+    width: 320,
+    height: 160,
+    release: jest.fn(),
+    saveAsync: async () => ({ uri: 'file:///cache/preview.jpg' }),
+  });
+  await verifyNetworkImage(
+    'https://cdn.example/contents/a',
+    'https://reader.example/',
+    new AbortController().signal,
+  );
+  expect(mockResize).toHaveBeenCalledWith({ width: 320 });
 });
 
 it('discards white previews and removes their temporary files', async () => {

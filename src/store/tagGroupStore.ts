@@ -15,11 +15,7 @@ export const useTagGroupStore = create<State>()(
       groups: [],
       save: (id, input, tags) => {
         const name = input.trim();
-        if (
-          !name ||
-          ['すべて', '未分類'].includes(name) ||
-          get().groups.some((g) => g.id !== id && g.name === name)
-        )
+        if (!name || name === 'すべて' || get().groups.some((g) => g.id !== id && g.name === name))
           return null;
         const key = id ?? Crypto.randomUUID();
         const members = [...new Set(tags)];
