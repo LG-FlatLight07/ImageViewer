@@ -152,7 +152,9 @@ function ImageSelectionContent({
     [primaryGroup, otherImages, collectionKind, networkFilter],
   );
 
-  const [verified, setVerified] = useState<Record<string, string>>({});
+  const [verified, setVerified] = useState<
+    Record<string, { previewUri: string; width: number; height: number }>
+  >({});
   const [checkedCount, setCheckedCount] = useState(0);
   useEffect(() => {
     if (collectionKind !== 'network') return;
@@ -169,7 +171,7 @@ function ImageSelectionContent({
         }
         if (result) {
           previews.push(result.previewUri);
-          setVerified((prev) => ({ ...prev, [candidate.id]: result.previewUri }));
+          setVerified((prev) => ({ ...prev, [candidate.id]: result }));
         }
         setCheckedCount((prev) => prev + 1);
       }
@@ -303,14 +305,47 @@ function ImageSelectionContent({
         key={image.id}
         style={styles.thumbWrapper}
         onPress={() => toggleImage(image.id)}
+        onLongPress={
+          collectionKind === 'network'
+            ? () => {
+                const info = verified[image.id];
+                const url = new URL(image.src);
+                Alert.alert(
+                  '保存する画像の情報',
+                  `画像サイズ: ${info?.width ?? '?'} × ${info?.height ?? '?'} px\n取得元: ${url.origin}${url.pathname}\n\n保存時にはこのURLの画像を縮小・再圧縮せずにダウンロードします。`,
+                );
+              }
+            : undefined
+        }
+        accessibilityHint={
+          collectionKind === 'network' ? '長押しで画像サイズと取得元を表示' : undefined
+        }
         activeOpacity={0.8}
       >
         <Image
-          source={{ uri: collectionKind === 'network' ? verified[image.id] : image.src }}
+          source={{
+            uri: collectionKind === 'network' ? verified[image.id]?.previewUri : image.src,
+          }}
           style={styles.thumbImage}
           contentFit="cover"
           cachePolicy="memory-disk"
         />
+        {collectionKind === 'network' && verified[image.id] && (
+          <Text
+            style={{
+              color: colors.text,
+              backgroundColor: colors.surface,
+              padding: 3,
+              fontSize: 12,
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+            }}
+          >
+            {verified[image.id].width} × {verified[image.id].height} px
+          </Text>
+        )}
         <View style={[styles.checkBadge, selected && styles.checkBadgeSelected]}>
           <Ionicons
             name={selected ? 'checkmark-circle' : 'ellipse-outline'}
