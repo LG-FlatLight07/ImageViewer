@@ -35,6 +35,7 @@ import {
   networkImageSnapshotScript,
   networkImageSourceRetryScript,
   parseNetworkImageMessage,
+  snapshotFailureDetails,
 } from '../../services/networkImages';
 
 const CHROME_SCREEN_ID = 'browser.chrome';
@@ -348,8 +349,7 @@ export function BrowserScreen() {
       if (data.length < 2000) {
         const status = JSON.parse(data);
         if (status?.type === 'NETWORK_IMAGES_ERROR') {
-          if (request?.id === status.requestId)
-            failScan(status.code === 'SECURITY_ERROR' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED');
+          if (request?.id === status.requestId) failScan(snapshotFailureDetails(status));
           return;
         }
       }

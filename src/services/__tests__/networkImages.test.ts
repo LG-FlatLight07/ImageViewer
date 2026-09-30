@@ -9,14 +9,42 @@ import {
   networkImageSourceRetryScript,
   NetworkImageCollection,
   parseNetworkImageMessage,
+  snapshotFailureDetails,
 } from '../networkImages';
 
 const page = 'https://reader.example/book/1';
 const first = 'https://cdn.example/contents/abcdef?exp=123&sig=a%2Fb+z&x=1&x=2';
 const second = 'https://cdn.example/contents/987654';
 
+it('takes a strict reader snapshot even when unrelated Resource Timing is unavailable', () => {
+  const h = harness();
+  Object.assign(h.sandbox, { DOMParser: new JSDOM('').window.DOMParser });
+  const url = 'https://komiflo.com/#!/comics/123/read/page/1';
+  h.context.location.href = url;
+  h.context.performance.getEntriesByType = () => {
+    throw new Error('Timing unavailable');
+  };
+  h.run(networkImageSourceRetryScript('reader', url, ''));
+  const result = parseNetworkImageMessage(h.messages[h.messages.length - 1]);
+  expect(result?.requestId).toBe('reader');
+  expect(result?.reader?.images).toEqual([]);
+  expect(result?.images).toEqual([]);
+});
+
+it('shows bounded diagnostics without signed URLs', () => {
+  expect(
+    snapshotFailureDetails({
+      code: 'SNAPSHOT_FAILED',
+      stage: 'READER',
+      errorName: 'TypeError',
+      detail: 'Unable to read https://cdn.example/img?sig=secret',
+    }),
+  ).toBe('SNAPSHOT_FAILED\n失敗箇所: 本編表示領域の取得\nTypeError: Unable to read [URL]');
+});
+
 it('reports a reader snapshot exception on the native-title retry path', async () => {
   const h = harness();
+  Object.assign(h.sandbox, { DOMParser: new JSDOM('').window.DOMParser });
   const url = 'https://komiflo.com/#!/comics/123/read/page/1';
   h.context.location.href = url;
   h.context.document.querySelectorAll.mockImplementation(() => {
@@ -28,6 +56,9 @@ it('reports a reader snapshot exception on the native-title retry path', async (
     type: 'NETWORK_IMAGES_ERROR',
     requestId: 'retry-failed',
     code: 'SNAPSHOT_FAILED',
+    stage: 'READER',
+    errorName: 'Error',
+    detail: 'Reader DOM failure',
   });
 });
 
@@ -42,6 +73,9 @@ it('returns an error response when DOM scanning throws instead of silently timin
     type: 'NETWORK_IMAGES_ERROR',
     requestId: 'failed-save',
     code: 'SNAPSHOT_FAILED',
+    stage: 'TITLE',
+    errorName: 'Error',
+    detail: 'DOM failure',
   });
 });
 
@@ -270,17 +304,17 @@ it('drops homepage resources and late responses after entering a work, but keeps
   );
   h.context.fetch('/old-request');
   h.context.performance.now = () => 200;
-  h.context.location.href = 'https://komiflo.com/#!/comics/35347/read/page/1';
+  h.context.location.href = 'https://reader.example/#!/comics/35347/read/page/1';
   h.callbacks.hashchange({});
   finish({ ok: true, url: first, headers: { get: () => 'image/jpeg' } });
   for (let i = 0; i < 8; i++) await Promise.resolve();
   expect(h.snapshot().images).toEqual([]);
   h.observe([{ name: second, initiatorType: 'img', startTime: 201 }]);
-  h.context.location.href = 'https://komiflo.com/#!/comics/35347/read/page/2';
+  h.context.location.href = 'https://reader.example/#!/comics/35347/read/page/2';
   h.callbacks.hashchange({});
   expect(h.snapshot().images.map((i) => i.src)).toEqual([second]);
   h.context.performance.now = () => 300;
-  h.context.location.href = 'https://komiflo.com/#!/comics/34999/read/page/1';
+  h.context.location.href = 'https://reader.example/#!/comics/34999/read/page/1';
   h.callbacks.hashchange({});
   expect(h.snapshot().images).toEqual([]);
 });

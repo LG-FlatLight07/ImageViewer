@@ -92,7 +92,7 @@ export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
     } else {
       try { src = node.toDataURL('image/png'); }
       catch (_) { result.blocked++; return; }
-      if (src.indexOf('data:image/png;base64,') !== 0) { result.blocked++; return; }
+      if (typeof src !== 'string' || src.indexOf('data:image/png;base64,') !== 0) { result.blocked++; return; }
     }
     if (seen.has(src)) return;
     if (size + src.length > 12582912) { result.skipped++; return; }

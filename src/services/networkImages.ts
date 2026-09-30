@@ -12,6 +12,31 @@ import {
 export const MAX_NETWORK_IMAGES = 5000;
 export const SOURCE_TITLE_TIMEOUT_MS = 10000;
 
+export function snapshotFailureDetails(status: Record<string, unknown>): string {
+  const code = status.code === 'SECURITY_ERROR' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED';
+  const stages: Record<string, string> = {
+    REQUEST: '取得処理の開始',
+    SCAN: '通信画像の走査',
+    TITLE: 'ページタイトルの取得',
+    SOURCE_TITLE: '元HTMLのタイトル解析',
+    READER: '本編表示領域の取得',
+    SEND: '画像データの送信',
+  };
+  const stage = typeof status.stage === 'string' ? stages[status.stage] : undefined;
+  const name =
+    typeof status.errorName === 'string' && /^[A-Za-z]+Error$/.test(status.errorName)
+      ? status.errorName
+      : 'Error';
+  const detail =
+    typeof status.detail === 'string'
+      ? status.detail
+          .slice(0, 240)
+          .replace(/https?:\/\/[^\s"'<>]+/g, '[URL]')
+          .replace(/[\x00-\x1f]/g, ' ')
+      : '';
+  return `${code}${stage ? `\n失敗箇所: ${stage}` : ''}${detail ? `\n${name}: ${detail}` : ''}`;
+}
+
 export function sourceTitleErrorMessage(code?: string): string {
   if (code?.match(/^HTTP_\d{3}$/))
     return `元HTMLの取得が HTTP ${code.slice(5)} で拒否・失敗しました。`;
@@ -197,6 +222,15 @@ export const NETWORK_IMAGE_SCRIPT = `
   var activeScope = contentScope(location.href);
   var readerSnapshot = ${READER_SNAPSHOT_FUNCTION};
   var sendMessage = ${IMAGE_MESSAGE_TRANSPORT_FUNCTION};
+  function stage(name, operation) {
+    try { return operation(); }
+    catch (error) {
+      var wrapped = new Error(error && error.message ? String(error.message) : String(error));
+      wrapped.name = error && error.name ? String(error.name) : 'Error';
+      wrapped.snapshotStage = name;
+      throw wrapped;
+    }
+  }
   function checkScope() {
     var nextScope = contentScope(location.href);
     if (nextScope === activeScope) return;
@@ -210,16 +244,20 @@ export const NETWORK_IMAGE_SCRIPT = `
     if (timer) { clearTimeout(timer); timer = null; }
     // Read at snapshot time so client-side page turns can update the title.
     // The DOM has already decoded HTML entities in the content attribute.
-    var titleMeta = document.querySelector('meta[property="og:title"]');
-    var downloadTitle = titleMeta && (titleMeta.getAttribute('content') || '').trim();
-    sendMessage({
+    var downloadTitle = stage('TITLE', function () {
+      if (sourceTitle) return sourceTitle;
+      var titleMeta = document.querySelector('meta[property="og:title"]');
+      return titleMeta && (titleMeta.getAttribute('content') || '').trim();
+    });
+    var reader = requestId ? stage('READER', readerSnapshot) : undefined;
+    stage('SEND', function () { sendMessage({
       type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
       titleFromSource: requestId ? !!sourceTitle : undefined,
       titleSourceError: sourceTitle ? undefined : sourceError,
-      images: Array.from((requestId ? records : dirty).values()), requestId: requestId
-      , reader: requestId ? readerSnapshot() : undefined
-      , excluded: Array.from(excluded)
-    });
+      images: reader ? [] : Array.from((requestId ? records : dirty).values()), requestId: requestId
+      , reader: reader
+      , excluded: reader ? [] : Array.from(excluded)
+    }); });
     dirty.clear();
   }
   function add(raw, base, source, at) {
@@ -253,8 +291,13 @@ export const NETWORK_IMAGE_SCRIPT = `
   }
   function scan() {
     checkScope();
+    // Strict reader snapshots use only PageView, never Resource Timing/DOM-wide
+    // candidates. Don't let irrelevant page resources block the reader snapshot.
+    if (/^(?:www\\.)?komiflo\\.com$/i.test(new URL(location.href).hostname)) return;
+    stage('SCAN', function () {
     Array.prototype.forEach.call(document.images, inspectImage);
     performance.getEntriesByType('resource').forEach(resource);
+    });
   }
   function inspectImage(img) {
     var src = accept(img.currentSrc || img.src, document.baseURI);
@@ -417,7 +460,7 @@ export const NETWORK_IMAGE_SCRIPT = `
     snapshotWithSource: snapshotWithSource,
     snapshotFromHtml: function (id, pageUrl, html, error) {
       if (location.href !== pageUrl) return;
-      var title = sourceTitleFromHtml(html);
+      var title = stage('SOURCE_TITLE', function () { return sourceTitleFromHtml(html); });
       scan(); emit(id, title, title ? undefined : (error || 'NOT_FOUND'));
     },
     clear: function () { records.clear(); dirty.clear(); cutoff = now(); scanExistingImages = false; emit(); }
@@ -440,7 +483,10 @@ function guardedSnapshotScript(requestId: string, body: string): string {
     function failed(error) {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'NETWORK_IMAGES_ERROR', requestId: ${JSON.stringify(requestId)},
-        code: error && error.name === 'SecurityError' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED'
+        code: error && error.name === 'SecurityError' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED',
+        stage: error && error.snapshotStage || 'REQUEST',
+        errorName: error && error.name ? String(error.name).slice(0, 60) : 'Error',
+        detail: error && error.message ? String(error.message).slice(0, 240) : 'Unknown error'
       }));
     }
     try { Promise.resolve((function () { ${body} })()).catch(failed); }
