@@ -26,6 +26,7 @@ import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmar
 import { useAppTheme } from '../../theme/theme';
 import { fetchNativePageSource } from '../../services/nativePageSource';
 import { networkScope } from '../../services/networkScope';
+import { NetworkImageTransport } from '../../services/networkImageTransport';
 import {
   MAX_NETWORK_IMAGES,
   SOURCE_TITLE_TIMEOUT_MS,
@@ -79,6 +80,7 @@ export function BrowserScreen() {
   const isTopPage = url === TOP_PAGE_URL;
   const topPageHtml = useMemo(() => buildTopPageHtml(searchEngine), [searchEngine]);
   const networkImages = useRef(new NetworkImageCollection());
+  const imageTransport = useRef(new NetworkImageTransport());
   const pendingNetworkScan = useRef<{
     id: string;
     tabId: string;
@@ -93,6 +95,7 @@ export function BrowserScreen() {
     () => () => {
       if (pendingNetworkScan.current) clearTimeout(pendingNetworkScan.current.timer);
       pendingNetworkScan.current = null;
+      imageTransport.current.clear();
     },
     [activeTabId],
   );
@@ -100,9 +103,11 @@ export function BrowserScreen() {
   const handleSaveNetworkImages = () => {
     if (isTopPage || !webViewRef.current || pendingNetworkScan.current) return;
     const id = `${activeTabId}-${Date.now()}`;
+    imageTransport.current.clear();
     const timer = setTimeout(
       () => {
         pendingNetworkScan.current = null;
+        imageTransport.current.clear();
         Alert.alert(
           '通信画像の確認',
           'ページから応答がありません。読み込み完了後にもう一度お試しください。',
@@ -316,7 +321,53 @@ export function BrowserScreen() {
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
-    const networkMessage = parseNetworkImageMessage(event.nativeEvent.data);
+    const request = pendingNetworkScan.current;
+    const failScan = (code: string) => {
+      if (!request || pendingNetworkScan.current !== request) return;
+      clearTimeout(request.timer);
+      pendingNetworkScan.current = null;
+      imageTransport.current.clear();
+      Alert.alert(
+        '通信画像の確認',
+        `本編画像の取得・受信処理に失敗しました。\n理由: ${code}\nサムネイルでの代用は行いません。`,
+      );
+    };
+    let data: string | null = event.nativeEvent.data;
+    try {
+      // Bind transfer fragments and errors to the same tab/document as the request.
+      if (/^\{"type":"NETWORK_IMAGES_(?:CHUNK|ERROR)"/.test(data)) {
+        const browser = useBrowserStore.getState();
+        const liveTab = browser.tabs.find((tab) => tab.id === activeTabId);
+        if (
+          !liveTab ||
+          browser.activeTabId !== activeTabId ||
+          new URL(liveTab.currentUrl).origin !== new URL(event.nativeEvent.url).origin
+        )
+          return;
+      }
+      if (data.length < 2000) {
+        const status = JSON.parse(data);
+        if (status?.type === 'NETWORK_IMAGES_ERROR') {
+          if (request?.id === status.requestId)
+            failScan(status.code === 'SECURITY_ERROR' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED');
+          return;
+        }
+      }
+      data = imageTransport.current.receive(data, request?.id);
+    } catch (error) {
+      // Ordinary non-JSON WebView messages still go through their existing handlers.
+      if (error instanceof SyntaxError) data = event.nativeEvent.data;
+      else {
+        failScan('IMAGE_TRANSFER_FAILED');
+        return;
+      }
+    }
+    if (data === null) return;
+    const networkMessage = parseNetworkImageMessage(data);
+    if (!networkMessage && data !== event.nativeEvent.data) {
+      failScan('INVALID_IMAGE_RESPONSE');
+      return;
+    }
     if (networkMessage) {
       // Reject stale documents after navigating to another site.
       try {

@@ -15,6 +15,36 @@ const page = 'https://reader.example/book/1';
 const first = 'https://cdn.example/contents/abcdef?exp=123&sig=a%2Fb+z&x=1&x=2';
 const second = 'https://cdn.example/contents/987654';
 
+it('reports a reader snapshot exception on the native-title retry path', async () => {
+  const h = harness();
+  const url = 'https://komiflo.com/#!/comics/123/read/page/1';
+  h.context.location.href = url;
+  h.context.document.querySelectorAll.mockImplementation(() => {
+    throw new Error('Reader DOM failure');
+  });
+  h.run(networkImageSourceRetryScript('retry-failed', url, ''));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(JSON.parse(h.messages[h.messages.length - 1])).toEqual({
+    type: 'NETWORK_IMAGES_ERROR',
+    requestId: 'retry-failed',
+    code: 'SNAPSHOT_FAILED',
+  });
+});
+
+it('returns an error response when DOM scanning throws instead of silently timing out', async () => {
+  const h = harness();
+  h.context.document.querySelector.mockImplementation(() => {
+    throw new Error('DOM failure');
+  });
+  h.run(networkImageSnapshotScript('failed-save'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(JSON.parse(h.messages[h.messages.length - 1])).toEqual({
+    type: 'NETWORK_IMAGES_ERROR',
+    requestId: 'failed-save',
+    code: 'SNAPSHOT_FAILED',
+  });
+});
+
 function harness(entries: object[] = []) {
   const messages: string[] = [];
   const callbacks: Record<string, (event: unknown) => void> = {};

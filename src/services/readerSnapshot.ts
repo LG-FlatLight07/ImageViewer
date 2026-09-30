@@ -30,11 +30,18 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
     if (!item || typeof item.src !== 'string' || seen.has(item.src)) continue;
     if (!Number.isInteger(item.width) || !Number.isInteger(item.height)) continue;
     if (item.width < 17 || item.height < 17 || item.width * item.height > 32_000_000) continue;
-    const png = /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(item.src);
+    // Check the bound before inspecting data; never feed multi-megabyte PNGs to
+    // the URL parser or an unbounded regexp on the native JS engine.
+    if (size + item.src.length > MAX_READER_PAYLOAD) break;
+    const png =
+      item.src.startsWith('data:image/png;base64,iVBORw0KGgo') &&
+      !/[^A-Za-z0-9+/=]/.test(item.src.slice('data:image/png;base64,'.length));
     let remote = false;
     try {
-      const url = new URL(item.src);
-      remote = /^https?:$/.test(url.protocol) && !/\/(?:resized|scrambled)\//i.test(url.pathname);
+      if (!png && /^https?:\/\//.test(item.src)) {
+        const url = new URL(item.src);
+        remote = /^https?:$/.test(url.protocol) && !/\/(?:resized|scrambled)\//i.test(url.pathname);
+      }
     } catch {
       /* not a remote URL */
     }

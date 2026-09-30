@@ -1,6 +1,7 @@
 import type { DetectedImage } from './imageGrouping';
 import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
 import { networkScope, NETWORK_SCOPE_FUNCTION } from './networkScope';
+import { IMAGE_MESSAGE_TRANSPORT_FUNCTION } from './networkImageTransport';
 import {
   parseReaderSnapshot,
   READER_SNAPSHOT_FUNCTION,
@@ -195,6 +196,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   var contentScope = ${NETWORK_SCOPE_FUNCTION};
   var activeScope = contentScope(location.href);
   var readerSnapshot = ${READER_SNAPSHOT_FUNCTION};
+  var sendMessage = ${IMAGE_MESSAGE_TRANSPORT_FUNCTION};
   function checkScope() {
     var nextScope = contentScope(location.href);
     if (nextScope === activeScope) return;
@@ -210,14 +212,14 @@ export const NETWORK_IMAGE_SCRIPT = `
     // The DOM has already decoded HTML entities in the content attribute.
     var titleMeta = document.querySelector('meta[property="og:title"]');
     var downloadTitle = titleMeta && (titleMeta.getAttribute('content') || '').trim();
-    window.ReactNativeWebView.postMessage(JSON.stringify({
+    sendMessage({
       type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
       titleFromSource: requestId ? !!sourceTitle : undefined,
       titleSourceError: sourceTitle ? undefined : sourceError,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
       , reader: requestId ? readerSnapshot() : undefined
       , excluded: Array.from(excluded)
-    }));
+    });
     dirty.clear();
   }
   function add(raw, base, source, at) {
@@ -427,7 +429,23 @@ true;
 `;
 
 export function networkImageSnapshotScript(requestId: string): string {
-  return `${NETWORK_IMAGE_SCRIPT}\nwindow.__myGalleryNetworkImages.snapshotWithSource(${JSON.stringify(requestId)}); true;`;
+  return guardedSnapshotScript(
+    requestId,
+    `${NETWORK_IMAGE_SCRIPT}\nreturn window.__myGalleryNetworkImages.snapshotWithSource(${JSON.stringify(requestId)});`,
+  );
+}
+
+function guardedSnapshotScript(requestId: string, body: string): string {
+  return `(function () {
+    function failed(error) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'NETWORK_IMAGES_ERROR', requestId: ${JSON.stringify(requestId)},
+        code: error && error.name === 'SecurityError' ? 'SECURITY_ERROR' : 'SNAPSHOT_FAILED'
+      }));
+    }
+    try { Promise.resolve((function () { ${body} })()).catch(failed); }
+    catch (error) { failed(error); }
+  })(); true;`;
 }
 
 export function networkImageSourceRetryScript(
@@ -436,5 +454,8 @@ export function networkImageSourceRetryScript(
   html: string,
   error?: string,
 ): string {
-  return `window.__myGalleryNetworkImages.snapshotFromHtml(${JSON.stringify(requestId)}, ${JSON.stringify(pageUrl)}, ${JSON.stringify(html)}, ${JSON.stringify(error ?? '')}); true;`;
+  return guardedSnapshotScript(
+    requestId,
+    `return window.__myGalleryNetworkImages.snapshotFromHtml(${JSON.stringify(requestId)}, ${JSON.stringify(pageUrl)}, ${JSON.stringify(html)}, ${JSON.stringify(error ?? '')});`,
+  );
 }
