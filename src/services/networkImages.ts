@@ -1,6 +1,12 @@
 import type { DetectedImage } from './imageGrouping';
 import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
 import { networkScope, NETWORK_SCOPE_FUNCTION } from './networkScope';
+import {
+  parseReaderSnapshot,
+  READER_SNAPSHOT_FUNCTION,
+  usesStrictReader,
+  type ReaderSnapshot,
+} from './readerSnapshot';
 
 export const MAX_NETWORK_IMAGES = 5000;
 export const SOURCE_TITLE_TIMEOUT_MS = 10000;
@@ -51,6 +57,7 @@ export type NetworkImageMessage = {
   images: NetworkImageRecord[];
   excluded?: string[];
   requestId?: string;
+  reader?: ReaderSnapshot;
 };
 
 export function parseNetworkImageMessage(data: string): NetworkImageMessage | null {
@@ -98,6 +105,10 @@ export function parseNetworkImageMessage(data: string): NetworkImageMessage | nu
             )
         : [],
       requestId: typeof message.requestId === 'string' ? message.requestId : undefined,
+      reader:
+        usesStrictReader(message.pageUrl) && message.requestId
+          ? parseReaderSnapshot(message.reader)
+          : undefined,
     };
   } catch {
     return null;
@@ -183,6 +194,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   var sourceTitleFromHtml = ${SOURCE_TITLE_FUNCTION};
   var contentScope = ${NETWORK_SCOPE_FUNCTION};
   var activeScope = contentScope(location.href);
+  var readerSnapshot = ${READER_SNAPSHOT_FUNCTION};
   function checkScope() {
     var nextScope = contentScope(location.href);
     if (nextScope === activeScope) return;
@@ -203,6 +215,7 @@ export const NETWORK_IMAGE_SCRIPT = `
       titleFromSource: requestId ? !!sourceTitle : undefined,
       titleSourceError: sourceTitle ? undefined : sourceError,
       images: Array.from((requestId ? records : dirty).values()), requestId: requestId
+      , reader: requestId ? readerSnapshot() : undefined
       , excluded: Array.from(excluded)
     }));
     dirty.clear();

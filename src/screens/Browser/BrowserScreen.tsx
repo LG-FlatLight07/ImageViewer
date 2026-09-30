@@ -330,7 +330,9 @@ export function BrowserScreen() {
       } catch {
         return;
       }
-      const images = networkImages.current.merge(activeTabId, networkMessage);
+      const images = networkMessage.reader
+        ? networkMessage.reader.images
+        : networkImages.current.merge(activeTabId, networkMessage);
       const pending = pendingNetworkScan.current;
       if (pending && pending.tabId === activeTabId && pending.id === networkMessage.requestId) {
         if (
@@ -356,7 +358,11 @@ export function BrowserScreen() {
         if (!images.length) {
           Alert.alert(
             '本編画像が見つかりません',
-            'ページを表示・操作してから再度お試しください。/contents/ の画像を収集します。取得できない通信もあります。',
+            networkMessage.reader
+              ? networkMessage.reader.blocked > 0
+                ? '本編はCanvasで表示されていますが、ブラウザーが画像の書き出しを拒否しました。おすすめ・サムネイルでの代用は行いません。'
+                : '本編の読み込み完了後に再度お試しください。本編表示領域の画像だけを対象にし、おすすめ・サムネイルは除外します。サイトの表示構造によっては取得できません。'
+              : 'ページを表示・操作してから再度お試しください。/contents/ の画像を収集します。取得できない通信もあります。',
           );
           return;
         }
@@ -371,7 +377,10 @@ export function BrowserScreen() {
           sourceUrl: networkMessage.pageUrl,
           primaryGroup: { groupKey: 'network-contents', images },
           otherImages: [],
-          collectionKind: 'network',
+          collectionKind: networkMessage.reader ? 'reader' : 'network',
+          readerSkipped: networkMessage.reader
+            ? networkMessage.reader.blocked + networkMessage.reader.skipped
+            : undefined,
           titleFromSource: networkMessage.titleFromSource,
           titleSourceError: networkMessage.titleSourceError,
         });

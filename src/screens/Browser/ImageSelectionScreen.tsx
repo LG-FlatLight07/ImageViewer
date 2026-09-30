@@ -157,7 +157,7 @@ function ImageSelectionContent({
   >({});
   const [checkedCount, setCheckedCount] = useState(0);
   useEffect(() => {
-    if (collectionKind !== 'network') return;
+    if (!collectionKind) return;
     const controller = new AbortController();
     const previews: string[] = [];
     let next = 0;
@@ -184,8 +184,7 @@ function ImageSelectionContent({
     };
   }, [candidates, collectionKind, sourceUrl]);
   const allImages = useMemo(
-    () =>
-      collectionKind === 'network' ? candidates.filter((image) => verified[image.id]) : candidates,
+    () => (collectionKind ? candidates.filter((image) => verified[image.id]) : candidates),
     [candidates, collectionKind, verified],
   );
 
@@ -220,7 +219,7 @@ function ImageSelectionContent({
   // thumbnails) and starving the ones actually on screen.
   const listRows = useMemo<ListRow[]>(() => {
     const rows: ListRow[] = [];
-    if (collectionKind === 'network') {
+    if (collectionKind) {
       rows.push({
         type: 'header',
         key: 'verified',
@@ -233,7 +232,7 @@ function ImageSelectionContent({
       rows.push({
         type: 'header',
         key: 'header-primary',
-        title: `${collectionKind === 'network' ? '通信から収集した本編画像候補' : '検出された連番画像'} (${primaryGroup.images.length}件)`,
+        title: `検出された連番画像 (${primaryGroup.images.length}件)`,
       });
       rows.push(...chunkIntoRows(primaryGroup.images, 'primary'));
     }
@@ -306,9 +305,16 @@ function ImageSelectionContent({
         style={styles.thumbWrapper}
         onPress={() => toggleImage(image.id)}
         onLongPress={
-          collectionKind === 'network'
+          collectionKind === 'network' || collectionKind === 'reader'
             ? () => {
-                const info = verified[image.id];
+                const info = collectionKind === 'reader' ? image : verified[image.id];
+                if (image.src.startsWith('data:image/png;')) {
+                  Alert.alert(
+                    '保存する画像の情報',
+                    `画像サイズ: ${info.width} × ${info.height} px\n取得元: 本編表示領域のCanvas\n描画済みの画像をPNGで保存します。拡大や縮小は行いません。`,
+                  );
+                  return;
+                }
                 const url = new URL(image.src);
                 Alert.alert(
                   '保存する画像の情報',
@@ -317,20 +323,18 @@ function ImageSelectionContent({
               }
             : undefined
         }
-        accessibilityHint={
-          collectionKind === 'network' ? '長押しで画像サイズと取得元を表示' : undefined
-        }
+        accessibilityHint={collectionKind ? '長押しで画像サイズと取得元を表示' : undefined}
         activeOpacity={0.8}
       >
         <Image
           source={{
-            uri: collectionKind === 'network' ? verified[image.id]?.previewUri : image.src,
+            uri: collectionKind ? verified[image.id]?.previewUri : image.src,
           }}
           style={styles.thumbImage}
           contentFit="cover"
           cachePolicy="memory-disk"
         />
-        {collectionKind === 'network' && verified[image.id] && (
+        {(collectionKind === 'reader' || (collectionKind === 'network' && verified[image.id])) && (
           <Text
             style={{
               color: colors.text,
@@ -343,7 +347,8 @@ function ImageSelectionContent({
               right: 0,
             }}
           >
-            {verified[image.id].width} × {verified[image.id].height} px
+            {collectionKind === 'reader' ? image.width : verified[image.id].width} ×{' '}
+            {collectionKind === 'reader' ? image.height : verified[image.id].height} px
           </Text>
         )}
         <View style={[styles.checkBadge, selected && styles.checkBadgeSelected]}>
@@ -419,6 +424,19 @@ function ImageSelectionContent({
                 {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
               </Text>
             </View>
+          ) : collectionKind === 'reader' ? (
+            <Text selectable style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+              本編表示領域から取得した画像です。Canvasは描画済みのピクセル数のままPNGで保存します。
+              現在ページ内に表示・保持されている本編だけが対象です。作品全ページの一括取得ではありません。
+              おすすめ・サムネイルは対象に含めません。
+              {`\n画像の内容を確認: ${checkedCount} / ${candidates.length}件。白紙・読み込み失敗を除外します。`}
+              {route.params.readerSkipped
+                ? `\n取得できない画像・除外した画像: ${route.params.readerSkipped}件`
+                : ''}
+              {route.params.titleFromSource === false
+                ? `\n${sourceTitleErrorMessage(route.params.titleSourceError)}`
+                : ''}
+            </Text>
           ) : null
         }
         // A handful of screens' worth up front so the initial view (and a

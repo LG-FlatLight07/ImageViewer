@@ -52,6 +52,7 @@ function harness(entries: object[] = []) {
       baseURI: page,
       title: 'Book',
       querySelector: jest.fn(),
+      querySelectorAll: jest.fn(() => []),
       addEventListener: (name: string, cb: (event: unknown) => void) => {
         callbacks[name] = cb;
       },

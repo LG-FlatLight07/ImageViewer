@@ -53,6 +53,7 @@ function resolveUniqueDirectory(baseName: string): Directory {
 }
 
 function inferExtension(url: string): string {
+  if (url.startsWith('data:image/png;base64,')) return 'png';
   const withoutQuery = url.split('?')[0];
   const match = withoutQuery.match(/\.([a-zA-Z0-9]{2,5})$/);
   return match ? match[1].toLowerCase() : 'jpg';
@@ -100,8 +101,14 @@ async function downloadWithConcurrency(
       try {
         const file = new File(directory, fileName);
         try {
-          await File.downloadFileAsync(url, file, { idempotent: true, headers });
+          if (url.startsWith('data:image/png;base64,')) {
+            // Preserve the reader canvas backing pixels, without a resize/JPEG pass.
+            file.write(url.slice('data:image/png;base64,'.length), { encoding: 'base64' });
+          } else {
+            await File.downloadFileAsync(url, file, { idempotent: true, headers });
+          }
         } catch (headerErr) {
+          if (url.startsWith('data:')) throw headerErr;
           // Some sites reject a synthetic Referer/Origin outright (e.g. a
           // strict allowlist, or a CDN expecting no referrer at all for
           // signed/tokenized URLs) even though the same image downloaded

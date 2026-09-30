@@ -21,25 +21,32 @@ export async function verifyNetworkImage(src: string, sourceUrl: string, signal:
   let context: ReturnType<typeof ImageManipulator.manipulate> | undefined;
   let image: Awaited<ReturnType<NonNullable<typeof context>['renderAsync']>> | undefined;
   try {
-    for (const headers of [{ Referer: sourceUrl, Origin: new URL(sourceUrl).origin }, undefined]) {
+    if (src.startsWith('data:image/png;base64,')) {
       if (signal.aborted) return null;
-      const task = createDownloadResumable(src, file.uri, { headers });
-      const cancel = () => {
-        void task.cancelAsync().catch(() => {});
-      };
-      signal.addEventListener('abort', cancel);
-      const timer = setTimeout(cancel, 15000);
-      try {
-        const result = await task.downloadAsync();
-        if (result && result.status >= 200 && result.status < 300) break;
-        if (!headers) return null;
-      } catch {
-        if (!headers) return null;
-      } finally {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', cancel);
+      file.write(src.slice('data:image/png;base64,'.length), { encoding: 'base64' });
+    } else
+      for (const headers of [
+        { Referer: sourceUrl, Origin: new URL(sourceUrl).origin },
+        undefined,
+      ]) {
+        if (signal.aborted) return null;
+        const task = createDownloadResumable(src, file.uri, { headers });
+        const cancel = () => {
+          void task.cancelAsync().catch(() => {});
+        };
+        signal.addEventListener('abort', cancel);
+        const timer = setTimeout(cancel, 15000);
+        try {
+          const result = await task.downloadAsync();
+          if (result && result.status >= 200 && result.status < 300) break;
+          if (!headers) return null;
+        } catch {
+          if (!headers) return null;
+        } finally {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', cancel);
+        }
       }
-    }
     if (signal.aborted || !file.exists || !file.size) return null;
     context = ImageManipulator.manipulate(file.uri);
     image = await context.renderAsync();
