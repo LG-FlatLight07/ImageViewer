@@ -38,6 +38,7 @@ function harness(entries: object[] = []) {
   const context = {
     TextDecoder,
     URL,
+    URLSearchParams,
     Map,
     Date,
     JSON,
@@ -67,7 +68,9 @@ function harness(entries: object[] = []) {
       observe() {}
     },
     ReactNativeWebView: { postMessage: (message: string) => messages.push(message) },
-    addEventListener: jest.fn(),
+    addEventListener: (name: string, cb: (event: unknown) => void) => {
+      callbacks[name] = cb;
+    },
   };
   const sandbox = { ...context, window: context };
   const run = (script: string) => runInNewContext(script, sandbox);
@@ -85,6 +88,7 @@ function harness(entries: object[] = []) {
     messages,
     sandbox,
     observe: (resources: object[]) => observer({ getEntries: () => resources }),
+    callbacks,
   };
 }
 
@@ -210,7 +214,9 @@ it('merges page turns, de-duplicates whole URLs, and isolates tabs and sites', (
   collection.merge('tab', message(page, first, 1));
   collection.merge('tab', message(page, first, 2));
   expect(
-    collection.merge('tab', message('https://reader.example/book/2', second, 3)).map((i) => i.src),
+    collection
+      .merge('tab', message('https://reader.example/book/1?page=2', second, 3))
+      .map((i) => i.src),
   ).toEqual([first, second]);
   expect(collection.merge('other-tab', message(page, second, 1))).toHaveLength(1);
   expect(collection.merge('tab', message('https://other.example', second, 1))).toHaveLength(1);
@@ -221,6 +227,56 @@ it('merges page turns, de-duplicates whole URLs, and isolates tabs and sites', (
 it('validates messages before accepting bridge data', () => {
   expect(parseNetworkImageMessage('not json')).toBeNull();
   expect(parseNetworkImageMessage('{"type":"NETWORK_IMAGES","images":[]}')).toBeNull();
+});
+
+it('drops homepage resources and late responses after entering a work, but keeps its page turns', async () => {
+  const h = harness([{ name: first, initiatorType: 'img', startTime: 1 }]);
+  let finish!: (value: unknown) => void;
+  h.fetch.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  h.context.fetch('/old-request');
+  h.context.performance.now = () => 200;
+  h.context.location.href = 'https://komiflo.com/#!/comics/35347/read/page/1';
+  h.callbacks.hashchange({});
+  finish({ ok: true, url: first, headers: { get: () => 'image/jpeg' } });
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(h.snapshot().images).toEqual([]);
+  h.observe([{ name: second, initiatorType: 'img', startTime: 201 }]);
+  h.context.location.href = 'https://komiflo.com/#!/comics/35347/read/page/2';
+  h.callbacks.hashchange({});
+  expect(h.snapshot().images.map((i) => i.src)).toEqual([second]);
+  h.context.performance.now = () => 300;
+  h.context.location.href = 'https://komiflo.com/#!/comics/34999/read/page/1';
+  h.callbacks.hashchange({});
+  expect(h.snapshot().images).toEqual([]);
+});
+
+it('separates native collections for different works on the same domain', () => {
+  const collection = new NetworkImageCollection();
+  const message = {
+    type: 'NETWORK_IMAGES' as const,
+    pageUrl: 'https://komiflo.com/',
+    pageTitle: 'Site',
+    images: [{ src: first, observedAt: 1, source: 'image' as const }],
+  };
+  collection.merge('tab', message);
+  const reader = 'https://komiflo.com/#!/comics/35347/read/page/1';
+  collection.navigate('tab', reader);
+  expect(collection.merge('tab', { ...message, pageUrl: reader, images: [] })).toEqual([]);
+  collection.merge('tab', { ...message, pageUrl: reader });
+  expect(
+    collection.merge('tab', {
+      ...message,
+      pageUrl: reader.replace('/page/1', '/page/2'),
+      images: [],
+    }),
+  ).toHaveLength(1);
+  expect(
+    collection.merge('tab', { ...message, pageUrl: reader.replace('35347', '34999'), images: [] }),
+  ).toEqual([]);
 });
 
 it('uses the Open Graph title for network download naming', () => {

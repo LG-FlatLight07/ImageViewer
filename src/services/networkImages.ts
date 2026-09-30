@@ -1,5 +1,6 @@
 import type { DetectedImage } from './imageGrouping';
 import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
+import { networkScope, NETWORK_SCOPE_FUNCTION } from './networkScope';
 
 export const MAX_NETWORK_IMAGES = 5000;
 export const SOURCE_TITLE_TIMEOUT_MS = 10000;
@@ -103,12 +104,12 @@ export function parseNetworkImageMessage(data: string): NetworkImageMessage | nu
   }
 }
 
-/** Memory-only per-tab collection. Changing site or closing the tab discards it. */
+/** Memory-only collection for the current content in each tab. */
 export class NetworkImageCollection {
   private tabs = new Map<string, { origin: string; images: Map<string, NetworkImageRecord> }>();
 
   merge(tabId: string, message: NetworkImageMessage): DetectedImage[] {
-    const origin = new URL(message.pageUrl).origin;
+    const origin = networkScope(message.pageUrl);
     let tab = this.tabs.get(tabId);
     if (!tab || tab.origin !== origin) {
       tab = { origin, images: new Map() };
@@ -141,7 +142,7 @@ export class NetworkImageCollection {
   }
   navigate(tabId: string, pageUrl: string) {
     try {
-      if (this.tabs.get(tabId)?.origin !== new URL(pageUrl).origin) this.clear(tabId);
+      if (this.tabs.get(tabId)?.origin !== networkScope(pageUrl)) this.clear(tabId);
     } catch {
       this.clear(tabId);
     }
@@ -180,8 +181,18 @@ export const NETWORK_IMAGE_SCRIPT = `
   var scanExistingImages = true;
   var maxBody = 2 * 1024 * 1024;
   var sourceTitleFromHtml = ${SOURCE_TITLE_FUNCTION};
+  var contentScope = ${NETWORK_SCOPE_FUNCTION};
+  var activeScope = contentScope(location.href);
+  function checkScope() {
+    var nextScope = contentScope(location.href);
+    if (nextScope === activeScope) return;
+    activeScope = nextScope;
+    records.clear(); dirty.clear(); excluded.clear();
+    cutoff = now(); scanExistingImages = false;
+  }
   function now() { return epoch + performance.now(); }
   function emit(requestId, sourceTitle, sourceError) {
+    checkScope();
     if (timer) { clearTimeout(timer); timer = null; }
     // Read at snapshot time so client-side page turns can update the title.
     // The DOM has already decoded HTML entities in the content attribute.
@@ -197,6 +208,7 @@ export const NETWORK_IMAGE_SCRIPT = `
     dirty.clear();
   }
   function add(raw, base, source, at) {
+    checkScope();
     if (at < cutoff || typeof raw !== 'string') return;
     var src = accept(raw, base);
     if (!src || excluded.has(src)) return;
@@ -225,6 +237,7 @@ export const NETWORK_IMAGE_SCRIPT = `
       /\\.(?:avif|webp|png|jpe?g|gif|svg)(?:[?#]|$)/i.test(url);
   }
   function scan() {
+    checkScope();
     Array.prototype.forEach.call(document.images, inspectImage);
     performance.getEntriesByType('resource').forEach(resource);
   }
@@ -288,6 +301,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   if (window.fetch) {
     var originalFetch = window.fetch;
     window.fetch = function () {
+      checkScope();
       var at = now();
       var result = originalFetch.apply(this, arguments);
       result.then(function (response) { inspectResponse(response, at).catch(function () {}); }, function () {});
@@ -297,6 +311,7 @@ export const NETWORK_IMAGE_SCRIPT = `
   if (window.XMLHttpRequest) {
     var originalSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function () {
+      checkScope();
       var xhr = this, at = now();
       function loaded() {
         try {
@@ -320,11 +335,23 @@ export const NETWORK_IMAGE_SCRIPT = `
   document.addEventListener('load', function (event) {
     var img = event.target;
     if (img && img.tagName === 'IMG' && img.naturalWidth > 0) {
+      checkScope();
       inspectImage(img);
-      add(img.currentSrc || img.src, document.baseURI, 'image', now());
+      if (scanExistingImages) add(img.currentSrc || img.src, document.baseURI, 'image', now());
+      else performance.getEntriesByType('resource').forEach(resource);
     }
   }, true);
   window.addEventListener('pagehide', function () { emit(); });
+  window.addEventListener('hashchange', checkScope);
+  window.addEventListener('popstate', checkScope);
+  if (window.history) ['pushState', 'replaceState'].forEach(function (method) {
+    var original = window.history[method];
+    if (typeof original !== 'function') return;
+    window.history[method] = function () {
+      var result = original.apply(this, arguments);
+      checkScope(); return result;
+    };
+  });
   async function snapshotWithSource(id) {
     var pageUrl = location.href;
     var sourceTitle = '';

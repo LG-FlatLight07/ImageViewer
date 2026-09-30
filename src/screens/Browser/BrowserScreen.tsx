@@ -25,6 +25,7 @@ import { addHistoryEntry } from '../../db/historyRepository';
 import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmarksRepository';
 import { useAppTheme } from '../../theme/theme';
 import { fetchNativePageSource } from '../../services/nativePageSource';
+import { networkScope } from '../../services/networkScope';
 import {
   MAX_NETWORK_IMAGES,
   SOURCE_TITLE_TIMEOUT_MS,
@@ -322,10 +323,7 @@ export function BrowserScreen() {
         const browser = useBrowserStore.getState();
         if (browser.activeTabId !== activeTabId) return;
         const liveTab = browser.tabs.find((tab) => tab.id === activeTabId);
-        if (
-          !liveTab ||
-          new URL(liveTab.currentUrl).origin !== new URL(networkMessage.pageUrl).origin
-        )
+        if (!liveTab || networkScope(liveTab.currentUrl) !== networkScope(networkMessage.pageUrl))
           return;
         if (new URL(networkMessage.pageUrl).origin !== new URL(event.nativeEvent.url).origin)
           return;
