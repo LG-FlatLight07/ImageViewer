@@ -17,6 +17,7 @@ export type ReaderSnapshot = {
   skipped: number;
   failures?: { name: string; message: string }[];
   captureRegions?: ReaderCaptureRegion[];
+  captureUnavailable?: string;
 };
 
 export function readerFailureMessage(reader: ReaderSnapshot): string {
@@ -26,7 +27,7 @@ export function readerFailureMessage(reader: ReaderSnapshot): string {
     ? 'Canvasの読み出しがブラウザーのセキュリティ制限（SecurityError）で拒否されました。現在のCanvas保存方式では取得できません。'
     : '本編のCanvasを検出しましたが、PNGへの書き出しに失敗しました。';
   const details = failures.map((failure) => `${failure.name}: ${failure.message}`).join('\n');
-  return `${explanation}${details ? `\n\n詳細:\n${details}` : ''}\n\nおすすめ・サムネイルでの代用は行いません。`;
+  return `${explanation}${details ? `\n\n詳細:\n${details}` : ''}${reader.captureUnavailable ? `\n\n画面キャプチャの判定: ${reader.captureUnavailable}` : ''}\n\nおすすめ・サムネイルでの代用は行いません。`;
 }
 
 /** Separate from network candidates: never fall back to CDN-wide thumbnail matches. */
@@ -35,6 +36,8 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
   if (!value || typeof value !== 'object') return result;
   const raw = value as Record<string, unknown>;
   if (raw.captureRegions) result.captureRegions = parseCaptureRegions(raw.captureRegions);
+  if (typeof raw.captureUnavailable === 'string')
+    result.captureUnavailable = raw.captureUnavailable.slice(0, 160);
   result.blocked = Number.isSafeInteger(raw.blocked) ? Math.max(0, Number(raw.blocked)) : 0;
   result.skipped = Number.isSafeInteger(raw.skipped) ? Math.max(0, Number(raw.skipped)) : 0;
   if (Array.isArray(raw.failures)) {
@@ -103,11 +106,36 @@ export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
     var ox = viewport ? viewport.offsetLeft : 0, oy = viewport ? viewport.offsetTop : 0;
     var left = Math.max(0, box.left - ox), top = Math.max(0, box.top - oy);
     var right = Math.min(vw, box.right - ox), bottom = Math.min(vh, box.bottom - oy);
-    if (!(vw > 0 && vh > 0 && right - left > 16 && bottom - top > 16)) return;
-    if (typeof document.elementFromPoint !== 'function') return;
+    if (!(vw > 0 && vh > 0 && right - left > 16 && bottom - top > 16)) { result.captureUnavailable = '本編の表示範囲が画面外、または小さすぎます。'; return; }
+    if (typeof document.elementFromPoint !== 'function') { result.captureUnavailable = '表示位置の確認機能を利用できません。'; return; }
     // Reject reader controls/recommendations overlaid on the proposed crop.
     var points = [[left+1,top+1],[right-1,top+1],[left+1,bottom-1],[right-1,bottom-1],[(left+right)/2,(top+bottom)/2]];
-    if (!points.every(function(p) { return document.elementFromPoint(p[0]+ox,p[1]+oy) === node; })) return;
+    function transparentReaderLayer(hit) {
+      if (!hit || !hit.matches || !hit.matches('.layer[data-name="UI"]')) return false;
+      var css = window.getComputedStyle(hit);
+      var transparent = css.backgroundColor === 'transparent' || css.backgroundColor === 'rgba(0, 0, 0, 0)';
+      if (!transparent || css.backgroundImage !== 'none' || css.boxShadow !== 'none' || css.filter !== 'none') return false;
+      // Decorative pseudo-elements can cover the page even when the layer itself is clear.
+      return ['::before','::after'].every(function(pseudo) {
+        var c = window.getComputedStyle(hit, pseudo).content;
+        return c === 'none' || c === 'normal';
+      });
+    }
+    function unobscured(p) {
+      var x = p[0]+ox, y = p[1]+oy;
+      var hits = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(x,y) : [document.elementFromPoint(x,y)];
+      for (var i = 0; i < hits.length; i++) {
+        var hit = hits[i];
+        // pointer-events:none on a visible canvas sends taps to its containing layer.
+        if (hit === node || (hit && hit.contains(node))) return true;
+        if (transparentReaderLayer(hit)) continue;
+        result.captureUnavailable = '本編に別の要素が重なっています (' + (hit ? hit.tagName + (hit.getAttribute('data-name') ? ':' + hit.getAttribute('data-name').slice(0,40) : '') : '画面外') + ')。サイトのメニューを閉じてください。';
+        return false;
+      }
+      result.captureUnavailable = '本編の表示位置を確認できませんでした。';
+      return false;
+    }
+    if (!points.every(unobscured)) return;
     if (!result.captureRegions) result.captureRegions = [];
     if (result.captureRegions.length < 4) result.captureRegions.push({x:left/vw,y:top/vh,width:(right-left)/vw,height:(bottom-top)/vh});
   }

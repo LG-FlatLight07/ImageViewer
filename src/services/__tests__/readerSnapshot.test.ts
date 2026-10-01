@@ -15,7 +15,7 @@ function snapshot(
   html: string,
   blocked: boolean | string = false,
   url = page,
-  visible?: 'reader' | 'overlay',
+  visible?: 'reader' | 'overlay' | 'parent' | 'transparent-ui' | 'opaque-ui',
 ) {
   const dom = new JSDOM(html, { url });
   const { window } = dom;
@@ -39,9 +39,17 @@ function snapshot(
       };
     }
   }
-  if (visible)
+  const overlay = window.document.createElement('div');
+  overlay.className = 'layer';
+  overlay.setAttribute('data-name', 'UI');
+  window.document.body.appendChild(overlay);
+  const canvas = window.document.querySelector('canvas')!;
+  if (visible) {
     window.document.elementFromPoint = () =>
-      visible === 'reader' ? window.document.querySelector('canvas') : window.document.body;
+      visible === 'reader' ? canvas : visible === 'parent' ? canvas.parentElement : overlay;
+    if (visible === 'transparent-ui' || visible === 'opaque-ui')
+      window.document.elementsFromPoint = () => [overlay, canvas];
+  }
   return runInNewContext(`(${READER_SNAPSHOT_FUNCTION})()`, {
     URL,
     Set,
@@ -52,7 +60,17 @@ function snapshot(
     window: {
       innerWidth: 400,
       innerHeight: 800,
-      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+      getComputedStyle: (node: Element) => ({
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
+        backgroundColor:
+          node === overlay && visible !== 'transparent-ui' ? 'rgb(0, 0, 0)' : 'rgba(0, 0, 0, 0)',
+        backgroundImage: 'none',
+        boxShadow: 'none',
+        filter: 'none',
+        content: 'none',
+      }),
     },
   });
 }
@@ -68,6 +86,34 @@ it('offers a native crop when PNG export is disabled, without collecting recomme
   );
   expect(result.images).toEqual([]);
   expect(result.captureRegions).toEqual([{ x: 0.125, y: 0.125, width: 0.75, height: 0.5 }]);
+});
+
+it.each(['parent', 'transparent-ui'] as const)(
+  'captures visible content when taps hit %s instead of the canvas',
+  (visible) => {
+    const result = parseReaderSnapshot(
+      snapshot(
+        '<div class="layer" data-name="PageView"><canvas width="1359" height="1920"></canvas></div>',
+        'empty',
+        page,
+        visible,
+      ),
+    );
+    expect(result.captureRegions).toEqual([{ x: 0.125, y: 0.125, width: 0.75, height: 0.5 }]);
+  },
+);
+
+it('rejects an opaque UI layer even if the reader is underneath', () => {
+  const result = parseReaderSnapshot(
+    snapshot(
+      '<div class="layer" data-name="PageView"><canvas width="1359" height="1920"></canvas></div>',
+      'empty',
+      page,
+      'opaque-ui',
+    ),
+  );
+  expect(result.captureRegions ?? []).toEqual([]);
+  expect(result.captureUnavailable).toContain('別の要素');
 });
 
 it('does not capture a menu or recommendation covering the reader', () => {
@@ -119,7 +165,7 @@ it('reports a tainted canvas without falling back to network thumbnails', () => 
       images: [{ src: 'https://cdn.example/contents/thumb.jpg', source: 'image', observedAt: 1 }],
     }),
   );
-  expect(message?.reader).toEqual({
+  expect(message?.reader).toMatchObject({
     images: [],
     blocked: 1,
     skipped: 0,
