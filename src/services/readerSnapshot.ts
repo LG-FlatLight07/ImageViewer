@@ -14,7 +14,18 @@ export type ReaderSnapshot = {
   images: DetectedImage[];
   blocked: number;
   skipped: number;
+  failures?: { name: string; message: string }[];
 };
+
+export function readerFailureMessage(reader: ReaderSnapshot): string {
+  const failures = reader.failures ?? [];
+  const security = failures.some((failure) => failure.name === 'SecurityError');
+  const explanation = security
+    ? 'Canvasの読み出しがブラウザーのセキュリティ制限（SecurityError）で拒否されました。現在のCanvas保存方式では取得できません。'
+    : '本編のCanvasを検出しましたが、PNGへの書き出しに失敗しました。';
+  const details = failures.map((failure) => `${failure.name}: ${failure.message}`).join('\n');
+  return `${explanation}${details ? `\n\n詳細:\n${details}` : ''}\n\nおすすめ・サムネイルでの代用は行いません。`;
+}
 
 /** Separate from network candidates: never fall back to CDN-wide thumbnail matches. */
 export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
@@ -23,6 +34,18 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
   const raw = value as Record<string, unknown>;
   result.blocked = Number.isSafeInteger(raw.blocked) ? Math.max(0, Number(raw.blocked)) : 0;
   result.skipped = Number.isSafeInteger(raw.skipped) ? Math.max(0, Number(raw.skipped)) : 0;
+  if (Array.isArray(raw.failures)) {
+    result.failures = raw.failures.slice(0, 3).map((failure) => ({
+      name: typeof failure?.name === 'string' ? failure.name.slice(0, 60) : 'Error',
+      message:
+        typeof failure?.message === 'string'
+          ? failure.message
+              .slice(0, 240)
+              .replace(/https?:\/\/[^\s"'<>]+/g, '[URL]')
+              .replace(/[\x00-\x1f]/g, ' ')
+          : '詳細なし',
+    }));
+  }
   if (!Array.isArray(raw.images)) return result;
   let size = 0;
   const seen = new Set<string>();
@@ -66,6 +89,11 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
 export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
   if (!/^(?:www\.)?komiflo\.com$/i.test(new URL(location.href).hostname)) return null;
   var result = { images: [], blocked: 0, skipped: 0 };
+  function failed(name, message) {
+    result.blocked++;
+    if (!result.failures) result.failures = [];
+    if (result.failures.length < 3) result.failures.push({name: String(name).slice(0, 60), message: String(message).slice(0, 240)});
+  }
   var url = new URL(location.href);
   var route = url.hash.replace(/^#!?/, '') || url.pathname;
   if (!/^\/comics\/\d+\/read(?:\/|$)/.test(route)) return result;
@@ -91,8 +119,10 @@ export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
       } catch (_) { return; }
     } else {
       try { src = node.toDataURL('image/png'); }
-      catch (_) { result.blocked++; return; }
-      if (typeof src !== 'string' || src.indexOf('data:image/png;base64,') !== 0) { result.blocked++; return; }
+      catch (error) { failed(error && error.name || 'Error', error && error.message || 'Canvas export failed'); return; }
+      if (typeof src !== 'string' || src.indexOf('data:image/png;base64,') !== 0) {
+        failed('InvalidCanvasResult', 'Canvas did not return PNG data (' + width + ' x ' + height + ' px)'); return;
+      }
     }
     if (seen.has(src)) return;
     if (size + src.length > 12582912) { result.skipped++; return; }

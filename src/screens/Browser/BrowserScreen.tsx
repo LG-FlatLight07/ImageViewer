@@ -26,6 +26,7 @@ import { addBookmark, isBookmarked, removeBookmarkByUrl } from '../../db/bookmar
 import { useAppTheme } from '../../theme/theme';
 import { fetchNativePageSource } from '../../services/nativePageSource';
 import { networkScope } from '../../services/networkScope';
+import { readerFailureMessage } from '../../services/readerSnapshot';
 import { NetworkImageTransport } from '../../services/networkImageTransport';
 import {
   MAX_NETWORK_IMAGES,
@@ -411,7 +412,7 @@ export function BrowserScreen() {
             '本編画像が見つかりません',
             networkMessage.reader
               ? networkMessage.reader.blocked > 0
-                ? '本編はCanvasで表示されていますが、ブラウザーが画像の書き出しを拒否しました。おすすめ・サムネイルでの代用は行いません。'
+                ? readerFailureMessage(networkMessage.reader)
                 : '本編の読み込み完了後に再度お試しください。本編表示領域の画像だけを対象にし、おすすめ・サムネイルは除外します。サイトの表示構造によっては取得できません。'
               : 'ページを表示・操作してから再度お試しください。/contents/ の画像を収集します。取得できない通信もあります。',
           );

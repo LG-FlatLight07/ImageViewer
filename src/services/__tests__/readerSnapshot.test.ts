@@ -1,12 +1,17 @@
 /// <reference types="node" />
 import { runInNewContext } from 'vm';
 import { JSDOM } from 'jsdom';
-import { parseReaderSnapshot, READER_SNAPSHOT_FUNCTION, usesStrictReader } from '../readerSnapshot';
+import {
+  parseReaderSnapshot,
+  READER_SNAPSHOT_FUNCTION,
+  usesStrictReader,
+  readerFailureMessage,
+} from '../readerSnapshot';
 import { parseNetworkImageMessage } from '../networkImages';
 
 const page = 'https://komiflo.com/#!/comics/123/read/page/1';
 const png = 'data:image/png;base64,iVBORw0KGgoAAA==';
-function snapshot(html: string, blocked = false, url = page) {
+function snapshot(html: string, blocked: boolean | string = false, url = page) {
   const dom = new JSDOM(html, { url });
   const { window } = dom;
   for (const node of window.document.querySelectorAll('img,canvas')) {
@@ -18,7 +23,11 @@ function snapshot(html: string, blocked = false, url = page) {
     node.getBoundingClientRect = () => ({ width: 300, height: 400 }) as DOMRect;
     if (node.tagName === 'CANVAS') {
       (node as unknown as HTMLCanvasElement).toDataURL = () => {
-        if (blocked) throw new Error('SecurityError');
+        if (blocked) {
+          const error = new Error('Canvas export failed');
+          error.name = typeof blocked === 'string' ? blocked : 'SecurityError';
+          throw error;
+        }
         return png;
       };
     }
@@ -71,7 +80,24 @@ it('reports a tainted canvas without falling back to network thumbnails', () => 
       images: [{ src: 'https://cdn.example/contents/thumb.jpg', source: 'image', observedAt: 1 }],
     }),
   );
-  expect(message?.reader).toEqual({ images: [], blocked: 1, skipped: 0 });
+  expect(message?.reader).toEqual({
+    images: [],
+    blocked: 1,
+    skipped: 0,
+    failures: [{ name: 'SecurityError', message: 'Canvas export failed' }],
+  });
+  expect(readerFailureMessage(message!.reader!)).toContain('セキュリティ制限');
+});
+
+it('preserves other export failures without calling them a security restriction', () => {
+  const result = parseReaderSnapshot(
+    snapshot(
+      '<div class="layer" data-name="PageView"><canvas width="1600" height="2200"></canvas></div>',
+      'TypeError',
+    ),
+  );
+  expect(readerFailureMessage(result)).toContain('TypeError: Canvas export failed');
+  expect(readerFailureMessage(result)).not.toContain('セキュリティ制限');
 });
 
 it('fails closed on home pages, changed DOM and missing reader data', () => {
