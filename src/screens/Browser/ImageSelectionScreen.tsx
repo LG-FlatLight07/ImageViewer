@@ -305,13 +305,13 @@ function ImageSelectionContent({
         style={styles.thumbWrapper}
         onPress={() => toggleImage(image.id)}
         onLongPress={
-          collectionKind === 'network' || collectionKind === 'reader'
+          collectionKind
             ? () => {
-                const info = collectionKind === 'reader' ? image : verified[image.id];
+                const info = collectionKind !== 'network' ? image : verified[image.id];
                 if (image.src.startsWith('data:image/png;')) {
                   Alert.alert(
                     '保存する画像の情報',
-                    `画像サイズ: ${info.width} × ${info.height} px\n取得元: 本編表示領域のCanvas\n描画済みの画像をPNGで保存します。拡大や縮小は行いません。`,
+                    `画像サイズ: ${info.width} × ${info.height} px\n取得元: ${collectionKind === 'capture' ? '表示中の本編（画面キャプチャ）' : '本編表示領域のCanvas'}\nPNGで保存します。拡大や縮小は行いません。`,
                   );
                   return;
                 }
@@ -334,7 +334,7 @@ function ImageSelectionContent({
           contentFit="cover"
           cachePolicy="memory-disk"
         />
-        {(collectionKind === 'reader' || (collectionKind === 'network' && verified[image.id])) && (
+        {collectionKind && verified[image.id] && (
           <Text
             style={{
               color: colors.text,
@@ -347,8 +347,7 @@ function ImageSelectionContent({
               right: 0,
             }}
           >
-            {collectionKind === 'reader' ? image.width : verified[image.id].width} ×{' '}
-            {collectionKind === 'reader' ? image.height : verified[image.id].height} px
+            {verified[image.id].width} × {verified[image.id].height} px
           </Text>
         )}
         <View style={[styles.checkBadge, selected && styles.checkBadgeSelected]}>
@@ -424,6 +423,15 @@ function ImageSelectionContent({
                 {`画像を確認: ${checkedCount} / ${candidates.length}件。白紙・単色・読み込み失敗を除外し、確認できた画像だけを表示します。収集履歴は雲形ボタンの長押しでクリアできます。`}
               </Text>
             </View>
+          ) : collectionKind === 'capture' ? (
+            <Text selectable style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+              表示中の本編を画面キャプチャしました。端末の実ピクセル数のままPNGで保存し、縮小・JPEG再圧縮は行いません。
+              画面外の部分は含まれません。作品全体や元画像の解像度での保存ではありません。プレビューで範囲を確認してください。
+              {`\n画像を確認: ${checkedCount} / ${candidates.length}件。白紙・読み込み失敗を除外します。`}
+              {route.params.titleFromSource === false
+                ? `\n${sourceTitleErrorMessage(route.params.titleSourceError)}`
+                : ''}
+            </Text>
           ) : collectionKind === 'reader' ? (
             <Text selectable style={[styles.sectionTitle, { color: colors.secondaryText }]}>
               本編表示領域から取得した画像です。Canvasは描画済みのピクセル数のままPNGで保存します。

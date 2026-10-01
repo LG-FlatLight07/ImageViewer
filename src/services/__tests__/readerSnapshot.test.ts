@@ -11,7 +11,12 @@ import { parseNetworkImageMessage } from '../networkImages';
 
 const page = 'https://komiflo.com/#!/comics/123/read/page/1';
 const png = 'data:image/png;base64,iVBORw0KGgoAAA==';
-function snapshot(html: string, blocked: boolean | string = false, url = page) {
+function snapshot(
+  html: string,
+  blocked: boolean | string = false,
+  url = page,
+  visible?: 'reader' | 'overlay',
+) {
   const dom = new JSDOM(html, { url });
   const { window } = dom;
   for (const node of window.document.querySelectorAll('img,canvas')) {
@@ -20,9 +25,11 @@ function snapshot(html: string, blocked: boolean | string = false, url = page) {
       naturalHeight: { value: 2200 },
       complete: { value: true },
     });
-    node.getBoundingClientRect = () => ({ width: 300, height: 400 }) as DOMRect;
+    node.getBoundingClientRect = () =>
+      ({ width: 300, height: 400, left: 50, top: 100, right: 350, bottom: 500 }) as DOMRect;
     if (node.tagName === 'CANVAS') {
       (node as unknown as HTMLCanvasElement).toDataURL = () => {
+        if (blocked === 'empty') return undefined as unknown as string;
         if (blocked) {
           const error = new Error('Canvas export failed');
           error.name = typeof blocked === 'string' ? blocked : 'SecurityError';
@@ -32,6 +39,9 @@ function snapshot(html: string, blocked: boolean | string = false, url = page) {
       };
     }
   }
+  if (visible)
+    window.document.elementFromPoint = () =>
+      visible === 'reader' ? window.document.querySelector('canvas') : window.document.body;
   return runInNewContext(`(${READER_SNAPSHOT_FUNCTION})()`, {
     URL,
     Set,
@@ -39,9 +49,38 @@ function snapshot(html: string, blocked: boolean | string = false, url = page) {
     Number,
     location: window.location,
     document: window.document,
-    window: { getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }) },
+    window: {
+      innerWidth: 400,
+      innerHeight: 800,
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    },
   });
 }
+
+it('offers a native crop when PNG export is disabled, without collecting recommendations', () => {
+  const result = parseReaderSnapshot(
+    snapshot(
+      '<div class="layer" data-name="PageView"><canvas width="1359" height="1920"></canvas><div><img src="https://cdn.example/contents/recommend.jpg"></div></div>',
+      'empty',
+      page,
+      'reader',
+    ),
+  );
+  expect(result.images).toEqual([]);
+  expect(result.captureRegions).toEqual([{ x: 0.125, y: 0.125, width: 0.75, height: 0.5 }]);
+});
+
+it('does not capture a menu or recommendation covering the reader', () => {
+  const result = parseReaderSnapshot(
+    snapshot(
+      '<div class="layer" data-name="PageView"><canvas width="1359" height="1920"></canvas></div>',
+      'empty',
+      page,
+      'overlay',
+    ),
+  );
+  expect(result.captureRegions ?? []).toEqual([]);
+});
 
 it('excludes same-CDN recommended images, top-page images, and thumbnail variants', () => {
   const result = snapshot(`<img src="https://cdn.example/contents/top.jpg">

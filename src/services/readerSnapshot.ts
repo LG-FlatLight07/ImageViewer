@@ -1,4 +1,5 @@
 import type { DetectedImage } from './imageGrouping';
+import { parseCaptureRegions, type ReaderCaptureRegion } from './readerCaptureGeometry';
 
 export const MAX_READER_PAYLOAD = 12 * 1024 * 1024;
 
@@ -15,6 +16,7 @@ export type ReaderSnapshot = {
   blocked: number;
   skipped: number;
   failures?: { name: string; message: string }[];
+  captureRegions?: ReaderCaptureRegion[];
 };
 
 export function readerFailureMessage(reader: ReaderSnapshot): string {
@@ -32,6 +34,7 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
   const result: ReaderSnapshot = { images: [], blocked: 0, skipped: 0 };
   if (!value || typeof value !== 'object') return result;
   const raw = value as Record<string, unknown>;
+  if (raw.captureRegions) result.captureRegions = parseCaptureRegions(raw.captureRegions);
   result.blocked = Number.isSafeInteger(raw.blocked) ? Math.max(0, Number(raw.blocked)) : 0;
   result.skipped = Number.isSafeInteger(raw.skipped) ? Math.max(0, Number(raw.skipped)) : 0;
   if (Array.isArray(raw.failures)) {
@@ -89,10 +92,24 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
 export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
   if (!/^(?:www\.)?komiflo\.com$/i.test(new URL(location.href).hostname)) return null;
   var result = { images: [], blocked: 0, skipped: 0 };
-  function failed(name, message) {
+  function failed(name, message, node, box) {
     result.blocked++;
     if (!result.failures) result.failures = [];
     if (result.failures.length < 3) result.failures.push({name: String(name).slice(0, 60), message: String(message).slice(0, 240)});
+    // Describe visible pixels for a native view capture; never replace page APIs.
+    var viewport = window.visualViewport;
+    var vw = viewport ? viewport.width : window.innerWidth;
+    var vh = viewport ? viewport.height : window.innerHeight;
+    var ox = viewport ? viewport.offsetLeft : 0, oy = viewport ? viewport.offsetTop : 0;
+    var left = Math.max(0, box.left - ox), top = Math.max(0, box.top - oy);
+    var right = Math.min(vw, box.right - ox), bottom = Math.min(vh, box.bottom - oy);
+    if (!(vw > 0 && vh > 0 && right - left > 16 && bottom - top > 16)) return;
+    if (typeof document.elementFromPoint !== 'function') return;
+    // Reject reader controls/recommendations overlaid on the proposed crop.
+    var points = [[left+1,top+1],[right-1,top+1],[left+1,bottom-1],[right-1,bottom-1],[(left+right)/2,(top+bottom)/2]];
+    if (!points.every(function(p) { return document.elementFromPoint(p[0]+ox,p[1]+oy) === node; })) return;
+    if (!result.captureRegions) result.captureRegions = [];
+    if (result.captureRegions.length < 4) result.captureRegions.push({x:left/vw,y:top/vh,width:(right-left)/vw,height:(bottom-top)/vh});
   }
   var url = new URL(location.href);
   var route = url.hash.replace(/^#!?/, '') || url.pathname;
@@ -119,9 +136,9 @@ export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
       } catch (_) { return; }
     } else {
       try { src = node.toDataURL('image/png'); }
-      catch (error) { failed(error && error.name || 'Error', error && error.message || 'Canvas export failed'); return; }
+      catch (error) { failed(error && error.name || 'Error', error && error.message || 'Canvas export failed', node, box); return; }
       if (typeof src !== 'string' || src.indexOf('data:image/png;base64,') !== 0) {
-        failed('InvalidCanvasResult', 'Canvas did not return PNG data (' + width + ' x ' + height + ' px)'); return;
+        failed('InvalidCanvasResult', 'Canvas did not return PNG data (' + width + ' x ' + height + ' px)', node, box); return;
       }
     }
     if (seen.has(src)) return;

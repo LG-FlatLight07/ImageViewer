@@ -27,6 +27,7 @@ import { useAppTheme } from '../../theme/theme';
 import { fetchNativePageSource } from '../../services/nativePageSource';
 import { networkScope } from '../../services/networkScope';
 import { readerFailureMessage } from '../../services/readerSnapshot';
+import { captureReaderView } from '../../services/captureReaderView';
 import { NetworkImageTransport } from '../../services/networkImageTransport';
 import {
   MAX_NETWORK_IMAGES,
@@ -36,6 +37,7 @@ import {
   networkImageSnapshotScript,
   networkImageSourceRetryScript,
   parseNetworkImageMessage,
+  type NetworkImageMessage,
   snapshotFailureDetails,
 } from '../../services/networkImages';
 
@@ -44,6 +46,9 @@ const CHROME_GAP = 16;
 
 export function BrowserScreen() {
   const webViewRef = useRef<WebView>(null);
+  const captureViewRef = useRef<View>(null);
+  const captureInProgress = useRef(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const rootNavigation = useRootNavigation();
   const navigation = useNavigation<NativeStackNavigationProp<BrowserStackParamList>>();
   const db = useSQLiteContext();
@@ -103,7 +108,8 @@ export function BrowserScreen() {
   );
 
   const handleSaveNetworkImages = () => {
-    if (isTopPage || !webViewRef.current || pendingNetworkScan.current) return;
+    if (isTopPage || !webViewRef.current || pendingNetworkScan.current || captureInProgress.current)
+      return;
     const id = `${activeTabId}-${Date.now()}`;
     imageTransport.current.clear();
     const timer = setTimeout(
@@ -322,6 +328,43 @@ export function BrowserScreen() {
     openTab(TOP_PAGE_URL);
   };
 
+  const captureVisibleReader = async (message: NetworkImageMessage) => {
+    if (captureInProgress.current || !message.reader?.captureRegions?.length) return;
+    captureInProgress.current = true;
+    setIsCapturing(true);
+    const stillCurrent = () => {
+      const state = useBrowserStore.getState();
+      return (
+        state.activeTabId === activeTabId &&
+        state.tabs.find((tab) => tab.id === activeTabId)?.currentUrl === message.pageUrl
+      );
+    };
+    try {
+      if (!stillCurrent()) return;
+      const images = await captureReaderView(captureViewRef, message.reader.captureRegions);
+      if (!stillCurrent()) return;
+      if (!images.length) throw new Error('CAPTURE_EMPTY');
+      rootNavigation.navigate('ImageSelection', {
+        pageTitle: message.pageTitle || title,
+        sourceUrl: message.pageUrl,
+        primaryGroup: { groupKey: 'reader-screen-capture', images },
+        otherImages: [],
+        collectionKind: 'capture',
+        titleFromSource: message.titleFromSource,
+        titleSourceError: message.titleSourceError,
+      });
+    } catch (error) {
+      if (stillCurrent())
+        Alert.alert(
+          '表示中の本編を保存できません',
+          `画面キャプチャに失敗しました。新しいAPKをインストール済みか確認してください。\n${error instanceof Error ? error.message.slice(0, 240) : 'CAPTURE_FAILED'}`,
+        );
+    } finally {
+      captureInProgress.current = false;
+      setIsCapturing(false);
+    }
+  };
+
   const handleMessage = (event: WebViewMessageEvent) => {
     const request = pendingNetworkScan.current;
     const failScan = (code: string) => {
@@ -408,6 +451,10 @@ export function BrowserScreen() {
         clearTimeout(pending.timer);
         pendingNetworkScan.current = null;
         if (!images.length) {
+          if (Platform.OS !== 'web' && networkMessage.reader?.captureRegions?.length) {
+            void captureVisibleReader(networkMessage);
+            return;
+          }
           Alert.alert(
             '本編画像が見つかりません',
             networkMessage.reader
@@ -512,31 +559,38 @@ export function BrowserScreen() {
         keyboardVerticalOffset={insets.top}
       >
         <DraggableLayoutArea>
-          <WebView
-            key={activeTabId}
-            ref={webViewRef}
-            source={isTopPage ? { html: topPageHtml } : { uri: url }}
+          <View
+            ref={captureViewRef}
+            collapsable={false}
+            pointerEvents={isCapturing ? 'none' : 'auto'}
             style={[
               styles.webview,
               chromeAtBottom
                 ? { marginBottom: BAR_MARGIN + chromeHeight + CHROME_GAP }
                 : { marginTop: BAR_MARGIN + chromeHeight + CHROME_GAP },
             ]}
-            onNavigationStateChange={handleNavigationStateChange}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => {
-              setLoading(false);
-              webViewRef.current?.injectJavaScript(NETWORK_IMAGE_SCRIPT);
-            }}
-            onMessage={handleMessage}
-            onShouldStartLoadWithRequest={handleShouldStartLoad}
-            startInLoadingState
-            incognito={disableHistory}
-            injectedJavaScriptBeforeContentLoaded={`${NETWORK_IMAGE_SCRIPT}\n${adBlockEnabled ? AD_BLOCK_SCRIPT : ''}`}
-            injectedJavaScript={NETWORK_IMAGE_SCRIPT}
-            setSupportMultipleWindows={!adBlockEnabled}
-            onOpenWindow={adBlockEnabled ? () => {} : undefined}
-          />
+          >
+            <WebView
+              key={activeTabId}
+              ref={webViewRef}
+              source={isTopPage ? { html: topPageHtml } : { uri: url }}
+              style={styles.webview}
+              onNavigationStateChange={handleNavigationStateChange}
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => {
+                setLoading(false);
+                webViewRef.current?.injectJavaScript(NETWORK_IMAGE_SCRIPT);
+              }}
+              onMessage={handleMessage}
+              onShouldStartLoadWithRequest={handleShouldStartLoad}
+              startInLoadingState
+              incognito={disableHistory}
+              injectedJavaScriptBeforeContentLoaded={`${NETWORK_IMAGE_SCRIPT}\n${adBlockEnabled ? AD_BLOCK_SCRIPT : ''}`}
+              injectedJavaScript={NETWORK_IMAGE_SCRIPT}
+              setSupportMultipleWindows={!adBlockEnabled}
+              onOpenWindow={adBlockEnabled ? () => {} : undefined}
+            />
+          </View>
           {disableHistory && <View pointerEvents="none" style={styles.privateModeBorder} />}
 
           <ControlGroup
