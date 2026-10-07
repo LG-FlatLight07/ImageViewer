@@ -17,6 +17,7 @@ export type ReaderSnapshot = {
   skipped: number;
   failures?: { name: string; message: string }[];
   captureRegions?: ReaderCaptureRegion[];
+  reviewCaptureRegions?: ReaderCaptureRegion[];
   captureUnavailable?: string;
 };
 
@@ -36,6 +37,8 @@ export function parseReaderSnapshot(value: unknown): ReaderSnapshot {
   if (!value || typeof value !== 'object') return result;
   const raw = value as Record<string, unknown>;
   if (raw.captureRegions) result.captureRegions = parseCaptureRegions(raw.captureRegions);
+  if (raw.reviewCaptureRegions)
+    result.reviewCaptureRegions = parseCaptureRegions(raw.reviewCaptureRegions);
   if (typeof raw.captureUnavailable === 'string')
     result.captureUnavailable = raw.captureUnavailable.slice(0, 160);
   result.blocked = Number.isSafeInteger(raw.blocked) ? Math.max(0, Number(raw.blocked)) : 0;
@@ -107,6 +110,10 @@ export const READER_SNAPSHOT_FUNCTION = String.raw`function () {
     var left = Math.max(0, box.left - ox), top = Math.max(0, box.top - oy);
     var right = Math.min(vw, box.right - ox), bottom = Math.min(vh, box.bottom - oy);
     if (!(vw > 0 && vh > 0 && right - left > 16 && bottom - top > 16)) { result.captureUnavailable = '本編の表示範囲が画面外、または小さすぎます。'; return; }
+    // Hit testing cannot prove that an overlapping element paints visible pixels.
+    // Keep only the validated main-canvas crop for explicit preview/selection.
+    if (!result.reviewCaptureRegions) result.reviewCaptureRegions = [];
+    if (result.reviewCaptureRegions.length < 4) result.reviewCaptureRegions.push({x:left/vw,y:top/vh,width:(right-left)/vw,height:(bottom-top)/vh});
     if (typeof document.elementFromPoint !== 'function') { result.captureUnavailable = '表示位置の確認機能を利用できません。'; return; }
     // Reject reader controls/recommendations overlaid on the proposed crop.
     var points = [[left+1,top+1],[right-1,top+1],[left+1,bottom-1],[right-1,bottom-1],[(left+right)/2,(top+bottom)/2]];

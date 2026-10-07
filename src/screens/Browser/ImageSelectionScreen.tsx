@@ -191,7 +191,9 @@ function ImageSelectionContent({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () =>
       new Set(
-        autoSelectSequentialImages ? (primaryGroup?.images.map((image) => image.id) ?? []) : [],
+        autoSelectSequentialImages && !route.params.captureNeedsReview
+          ? (primaryGroup?.images.map((image) => image.id) ?? [])
+          : [],
       ),
   );
 
@@ -331,7 +333,7 @@ function ImageSelectionContent({
             uri: collectionKind ? verified[image.id]?.previewUri : image.src,
           }}
           style={styles.thumbImage}
-          contentFit="cover"
+          contentFit={collectionKind === 'capture' ? 'contain' : 'cover'}
           cachePolicy="memory-disk"
         />
         {collectionKind && verified[image.id] && (
@@ -427,6 +429,9 @@ function ImageSelectionContent({
             <Text selectable style={[styles.sectionTitle, { color: colors.secondaryText }]}>
               表示中の本編を画面キャプチャしました。端末の実ピクセル数のままPNGで保存し、縮小・JPEG再圧縮は行いません。
               画面外の部分は含まれません。作品全体や元画像の解像度での保存ではありません。プレビューで範囲を確認してください。
+              {route.params.captureNeedsReview
+                ? '\n重なっている要素が透明かどうかを自動判定できませんでした。画像は未選択です。内容を確認して保存する画像を選択してください。メニューなどが写っている場合は戻って閉じ、撮り直してください。'
+                : ''}
               {`\n画像を確認: ${checkedCount} / ${candidates.length}件。白紙・読み込み失敗を除外します。`}
               {route.params.titleFromSource === false
                 ? `\n${sourceTitleErrorMessage(route.params.titleSourceError)}`

@@ -329,7 +329,10 @@ export function BrowserScreen() {
   };
 
   const captureVisibleReader = async (message: NetworkImageMessage) => {
-    if (captureInProgress.current || !message.reader?.captureRegions?.length) return;
+    const regions = message.reader?.captureRegions?.length
+      ? message.reader.captureRegions
+      : message.reader?.reviewCaptureRegions;
+    if (captureInProgress.current || !regions?.length) return;
     captureInProgress.current = true;
     setIsCapturing(true);
     const stillCurrent = () => {
@@ -341,7 +344,7 @@ export function BrowserScreen() {
     };
     try {
       if (!stillCurrent()) return;
-      const images = await captureReaderView(captureViewRef, message.reader.captureRegions);
+      const images = await captureReaderView(captureViewRef, regions);
       if (!stillCurrent()) return;
       if (!images.length) throw new Error('CAPTURE_EMPTY');
       rootNavigation.navigate('ImageSelection', {
@@ -350,6 +353,7 @@ export function BrowserScreen() {
         primaryGroup: { groupKey: 'reader-screen-capture', images },
         otherImages: [],
         collectionKind: 'capture',
+        captureNeedsReview: !message.reader?.captureRegions?.length,
         titleFromSource: message.titleFromSource,
         titleSourceError: message.titleSourceError,
       });
@@ -451,7 +455,11 @@ export function BrowserScreen() {
         clearTimeout(pending.timer);
         pendingNetworkScan.current = null;
         if (!images.length) {
-          if (Platform.OS !== 'web' && networkMessage.reader?.captureRegions?.length) {
+          if (
+            Platform.OS !== 'web' &&
+            (networkMessage.reader?.captureRegions?.length ||
+              networkMessage.reader?.reviewCaptureRegions?.length)
+          ) {
             void captureVisibleReader(networkMessage);
             return;
           }

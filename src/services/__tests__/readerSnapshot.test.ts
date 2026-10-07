@@ -116,7 +116,7 @@ it('rejects an opaque UI layer even if the reader is underneath', () => {
   expect(result.captureUnavailable).toContain('別の要素');
 });
 
-it('does not capture a menu or recommendation covering the reader', () => {
+it('requires review when an overlay prevents automatic visibility confirmation', () => {
   const result = parseReaderSnapshot(
     snapshot(
       '<div class="layer" data-name="PageView"><canvas width="1359" height="1920"></canvas></div>',
@@ -126,6 +126,30 @@ it('does not capture a menu or recommendation covering the reader', () => {
     ),
   );
   expect(result.captureRegions ?? []).toEqual([]);
+  expect(result.reviewCaptureRegions).toEqual([{ x: 0.125, y: 0.125, width: 0.75, height: 0.5 }]);
+});
+
+it('never proposes review crops for nested recommendations or unrelated canvases', () => {
+  const result = parseReaderSnapshot(
+    snapshot(
+      '<canvas width="1359" height="1920"></canvas><div class="layer" data-name="PageView"><div><canvas width="1359" height="1920"></canvas></div></div>',
+      'empty',
+      page,
+      'overlay',
+    ),
+  );
+  expect(result.reviewCaptureRegions ?? []).toEqual([]);
+});
+
+it('rejects review crop coordinates outside the viewport', () => {
+  expect(
+    parseReaderSnapshot({
+      reviewCaptureRegions: [
+        { x: -0.1, y: 0, width: 1, height: 1 },
+        { x: 0, y: 0, width: 2, height: 1 },
+      ],
+    }).reviewCaptureRegions,
+  ).toEqual([]);
 });
 
 it('excludes same-CDN recommended images, top-page images, and thumbnail variants', () => {

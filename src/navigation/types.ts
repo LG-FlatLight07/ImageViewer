@@ -8,6 +8,7 @@ export type RootStackParamList = {
     primaryGroup: DetectedImageGroup | null;
     otherImages: DetectedImage[];
     collectionKind?: 'network' | 'reader' | 'capture';
+    captureNeedsReview?: boolean;
     readerSkipped?: number;
     titleFromSource?: boolean;
     titleSourceError?: string;
