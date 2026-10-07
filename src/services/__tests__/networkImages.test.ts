@@ -16,7 +16,7 @@ const page = 'https://reader.example/book/1';
 const first = 'https://cdn.example/contents/abcdef?exp=123&sig=a%2Fb+z&x=1&x=2';
 const second = 'https://cdn.example/contents/987654';
 
-it('takes a strict reader snapshot even when unrelated Resource Timing is unavailable', () => {
+it('keeps network saving available when Resource Timing is unavailable', () => {
   const h = harness();
   Object.assign(h.sandbox, { DOMParser: new JSDOM('').window.DOMParser });
   const url = 'https://komiflo.com/#!/comics/123/read/page/1';
@@ -27,7 +27,7 @@ it('takes a strict reader snapshot even when unrelated Resource Timing is unavai
   h.run(networkImageSourceRetryScript('reader', url, ''));
   const result = parseNetworkImageMessage(h.messages[h.messages.length - 1]);
   expect(result?.requestId).toBe('reader');
-  expect(result?.reader?.images).toEqual([]);
+  expect(result?.reader).toBeUndefined();
   expect(result?.images).toEqual([]);
 });
 
@@ -42,7 +42,7 @@ it('shows bounded diagnostics without signed URLs', () => {
   ).toBe('SNAPSHOT_FAILED\n失敗箇所: 本編表示領域の取得\nTypeError: Unable to read [URL]');
 });
 
-it('reports a reader snapshot exception on the native-title retry path', async () => {
+it('collects low resolution URLs on Komiflo without invoking canvas extraction', async () => {
   const h = harness();
   Object.assign(h.sandbox, { DOMParser: new JSDOM('').window.DOMParser });
   const url = 'https://komiflo.com/#!/comics/123/read/page/1';
@@ -50,16 +50,18 @@ it('reports a reader snapshot exception on the native-title retry path', async (
   h.context.document.querySelectorAll.mockImplementation(() => {
     throw new Error('Reader DOM failure');
   });
+  h.snapshot(); // establish the new content scope before its requests arrive
+  const src =
+    'https://image.komiflo-cdn.com/resized/396_desktop_medium_2x/contents/a.jpg?exp=1&sig=a%2Fb';
+  h.context.performance.getEntriesByType = () => [
+    { name: src, initiatorType: 'img', startTime: 101 },
+  ];
   h.run(networkImageSourceRetryScript('retry-failed', url, ''));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(JSON.parse(h.messages[h.messages.length - 1])).toEqual({
-    type: 'NETWORK_IMAGES_ERROR',
-    requestId: 'retry-failed',
-    code: 'SNAPSHOT_FAILED',
-    stage: 'READER',
-    errorName: 'Error',
-    detail: 'Reader DOM failure',
-  });
+  const result = parseNetworkImageMessage(h.messages[h.messages.length - 1]);
+  expect(result?.reader).toBeUndefined();
+  expect(result?.images.map((image) => image.src)).toEqual([src]);
+  expect(h.context.document.querySelectorAll).not.toHaveBeenCalled();
 });
 
 it('returns an error response when DOM scanning throws instead of silently timing out', async () => {

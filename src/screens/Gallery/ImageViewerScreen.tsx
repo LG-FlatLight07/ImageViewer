@@ -26,6 +26,7 @@ import Animated, {
 import type { GalleryStackParamList } from '../../navigation/types';
 import { listViewerImages } from '../../db/viewerImages';
 import { useSettingsStore } from '../../store/settingsStore';
+import { EnhancedGalleryImage } from '../../components/EnhancedGalleryImage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GAP = 2;
@@ -180,6 +181,7 @@ function ImageViewerContent({
   // a gesture can only ever move along one axis — never diagonally.
   const axisLock = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(clampedStartIndex);
+  const [enhance, setEnhance] = useState(true);
 
   const setIndex = useCallback((index: number) => {
     setCurrentIndex(index);
@@ -299,16 +301,31 @@ function ImageViewerContent({
               ]}
             >
               {Math.abs(index - currentIndex) <= LOAD_WINDOW && (
-                <Image
-                  source={{ uri: page.uri }}
+                <View
                   style={
                     isHorizontal
                       ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
                       : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
                   }
-                  contentFit="contain"
-                  cachePolicy="memory-disk"
-                />
+                >
+                  <Image
+                    source={{ uri: page.uri }}
+                    style={
+                      isHorizontal
+                        ? { width: pageSize - GAP, height: SCREEN_HEIGHT }
+                        : { width: SCREEN_WIDTH, height: pageHeights[index] ?? SCREEN_HEIGHT }
+                    }
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                  />
+                  {enhance &&
+                    index === currentIndex &&
+                    page.width > 0 &&
+                    page.width < 1000 &&
+                    page.width * page.height <= 2000000 && (
+                      <EnhancedGalleryImage key={page.uri} uri={page.uri} />
+                    )}
+                </View>
               )}
             </View>
           ))}
@@ -322,6 +339,15 @@ function ImageViewerContent({
         <Text style={styles.counter}>
           {currentIndex + 1} / {pages.length}
         </Text>
+        <TouchableOpacity
+          onPress={() => setEnhance((value) => !value)}
+          accessibilityRole="button"
+          accessibilityLabel="低解像度画像の表示補正を切り替える"
+          accessibilityState={{ selected: enhance }}
+          hitSlop={8}
+        >
+          <Text style={styles.counter}>表示補正 {enhance ? 'ON' : 'OFF'}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

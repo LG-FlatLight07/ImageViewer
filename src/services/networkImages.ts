@@ -2,12 +2,7 @@ import type { DetectedImage } from './imageGrouping';
 import { SOURCE_TITLE_FUNCTION } from './sourceTitleScript';
 import { networkScope, NETWORK_SCOPE_FUNCTION } from './networkScope';
 import { IMAGE_MESSAGE_TRANSPORT_FUNCTION } from './networkImageTransport';
-import {
-  parseReaderSnapshot,
-  READER_SNAPSHOT_FUNCTION,
-  usesStrictReader,
-  type ReaderSnapshot,
-} from './readerSnapshot';
+import { parseReaderSnapshot, usesStrictReader, type ReaderSnapshot } from './readerSnapshot';
 
 export const MAX_NETWORK_IMAGES = 5000;
 export const SOURCE_TITLE_TIMEOUT_MS = 10000;
@@ -132,7 +127,7 @@ export function parseNetworkImageMessage(data: string): NetworkImageMessage | nu
         : [],
       requestId: typeof message.requestId === 'string' ? message.requestId : undefined,
       reader:
-        usesStrictReader(message.pageUrl) && message.requestId
+        usesStrictReader(message.pageUrl) && message.requestId && message.reader
           ? parseReaderSnapshot(message.reader)
           : undefined,
     };
@@ -220,7 +215,6 @@ export const NETWORK_IMAGE_SCRIPT = `
   var sourceTitleFromHtml = ${SOURCE_TITLE_FUNCTION};
   var contentScope = ${NETWORK_SCOPE_FUNCTION};
   var activeScope = contentScope(location.href);
-  var readerSnapshot = ${READER_SNAPSHOT_FUNCTION};
   var sendMessage = ${IMAGE_MESSAGE_TRANSPORT_FUNCTION};
   function stage(name, operation) {
     try { return operation(); }
@@ -249,14 +243,12 @@ export const NETWORK_IMAGE_SCRIPT = `
       var titleMeta = document.querySelector('meta[property="og:title"]');
       return titleMeta && (titleMeta.getAttribute('content') || '').trim();
     });
-    var reader = requestId ? stage('READER', readerSnapshot) : undefined;
     stage('SEND', function () { sendMessage({
       type: 'NETWORK_IMAGES', pageUrl: location.href, pageTitle: sourceTitle || downloadTitle || document.title,
       titleFromSource: requestId ? !!sourceTitle : undefined,
       titleSourceError: sourceTitle ? undefined : sourceError,
-      images: reader ? [] : Array.from((requestId ? records : dirty).values()), requestId: requestId
-      , reader: reader
-      , excluded: reader ? [] : Array.from(excluded)
+      images: Array.from((requestId ? records : dirty).values()), requestId: requestId
+      , excluded: Array.from(excluded)
     }); });
     dirty.clear();
   }
@@ -291,12 +283,9 @@ export const NETWORK_IMAGE_SCRIPT = `
   }
   function scan() {
     checkScope();
-    // Strict reader snapshots use only PageView, never Resource Timing/DOM-wide
-    // candidates. Don't let irrelevant page resources block the reader snapshot.
-    if (/^(?:www\\.)?komiflo\\.com$/i.test(new URL(location.href).hostname)) return;
     stage('SCAN', function () {
     Array.prototype.forEach.call(document.images, inspectImage);
-    performance.getEntriesByType('resource').forEach(resource);
+    try { performance.getEntriesByType('resource').forEach(resource); } catch (_) {}
     });
   }
   function inspectImage(img) {
